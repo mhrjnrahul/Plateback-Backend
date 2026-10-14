@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PlateBack.Api/PlateBack.Api.csproj" />
+    <Project Path="src/PlateBack.Application/PlateBack.Application.csproj" />
+    <Project Path="src/PlateBack.Domain/PlateBack.Domain.csproj" />
+    <Project Path="src/PlateBack.Infrastructure/PlateBack.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PlateBack.Api.IntegrationTests/PlateBack.Api.IntegrationTests.csproj" />
+    <Project Path="tests/PlateBack.Application.Tests/PlateBack.Application.Tests.csproj" />
+    <Project Path="tests/PlateBack.Domain.Tests/PlateBack.Domain.Tests.csproj" />
+  </Folder>
+</Solution>

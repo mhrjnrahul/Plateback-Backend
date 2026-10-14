@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\PlateBack.Domain\PlateBack.Domain.csproj" />
+  </ItemGroup>
+</Project>

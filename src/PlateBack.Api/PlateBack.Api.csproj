@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <ItemGroup>
+    <ProjectReference Include="..\PlateBack.Application\PlateBack.Application.csproj" />
+    <ProjectReference Include="..\PlateBack.Infrastructure\PlateBack.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>
