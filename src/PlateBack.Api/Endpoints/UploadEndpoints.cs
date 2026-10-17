@@ -10,12 +10,13 @@ internal static class UploadEndpoints
 
     public static void MapUploadEndpoints(this RouteGroupBuilder api)
     {
-        api.MapPost("/uploads/images", async (IFormFile? file, UploadImageHandler handler, HttpRequest request, CancellationToken ct) =>
+        api.MapPost("/uploads/images", async (IFormFile? file, UploadImageHandler handler, CancellationToken ct) =>
             {
                 await using var stream = file?.OpenReadStream();
                 var path = await handler.HandleAsync(stream, file?.Length ?? 0, ct);
-                var url = $"{request.Scheme}://{request.Host}{path}";
-                return TypedResults.Created(url, new ImageUploadResponse(url));
+                // A site-relative path ("/uploads/..."), so the stored imageUrl keeps
+                // working behind the frontend's proxy and on any later host name.
+                return TypedResults.Created(path, new ImageUploadResponse(path));
             })
             .RequireAuthorization()
             .DisableAntiforgery() // Bearer-token API: no cookies are used for this request.

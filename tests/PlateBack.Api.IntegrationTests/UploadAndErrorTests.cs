@@ -30,9 +30,10 @@ public class UploadTests(PlateBackFactory factory) : ApiTestBase(factory)
         var arjun = await ArjunAsync();
         var upload = await ReadAsync<UploadBody>(
             await arjun.PostAsync("/api/v1/uploads/images", Form(Png, "bread.png", "image/png"), Ct), HttpStatusCode.Created);
+        upload.Url.ShouldStartWith("/uploads/");
         upload.Url.ShouldEndWith(".png");
 
-        var served = await Anonymous().GetAsync(new Uri(upload.Url).AbsolutePath, Ct);
+        var served = await Anonymous().GetAsync(upload.Url, Ct);
         served.StatusCode.ShouldBe(HttpStatusCode.OK);
         served.Headers.GetValues("X-Content-Type-Options").ShouldBe(["nosniff"]);
         (await served.Content.ReadAsByteArrayAsync(Ct)).ShouldBe(Png);

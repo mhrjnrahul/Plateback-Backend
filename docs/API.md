@@ -495,10 +495,10 @@ curl -X POST http://localhost:5080/api/v1/uploads/images \
 **201 Created**
 
 ```json
-{ "url": "http://localhost:5080/uploads/01a14873b0c27f2b9d4e6a1c5f0e2d3a.jpg" }
+{ "url": "/uploads/01a14873b0c27f2b9d4e6a1c5f0e2d3a.jpg" }
 ```
 
-Use `url` as the listing's `imageUrl`. **Errors:** 400 `VALIDATION_ERROR` on `file` ("Use a JPEG, PNG or WebP photo.", "The photo must be 10 MB or smaller."), 401, 413.
+Use `url` as the listing's `imageUrl`. It is a path on the API's host; the frontend's dev server proxies `/uploads` to the API. **Errors:** 400 `VALIDATION_ERROR` on `file` ("Use a JPEG, PNG or WebP photo.", "The photo must be 10 MB or smaller."), 401, 413.
 
 ## Admin
 
