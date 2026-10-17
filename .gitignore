@@ -480,3 +480,28 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# ---------- PlateBack ----------
+# Secrets: connection strings and the JWT key live in `dotnet user-secrets`
+# (outside the repository) or environment variables, never in these files.
+appsettings.*.local.json
+appsettings.Production.json
+*.pfx
+*.pem
+*.key
+
+# Uploaded listing photos (local storage)
+src/PlateBack.Api/uploads/
+uploads/
+
+# Test results and coverage
+TestResults/
+coverage/
+*.coverage
+*.cobertura.xml
+
+# Editor settings stay local
+.vscode/
+
+# Submission archives
+*.zip

@@ -1,5 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
+
   <ItemGroup>
     <ProjectReference Include="..\PlateBack.Domain\PlateBack.Domain.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- EF Core abstractions only (DbSet, transactions); no database provider. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="PlateBack.Application.Tests" />
+  </ItemGroup>
+
 </Project>
