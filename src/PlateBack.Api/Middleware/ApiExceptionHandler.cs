@@ -53,7 +53,9 @@ internal sealed partial class ApiExceptionHandler(ILogger<ApiExceptionHandler> l
                 break;
 
             case OperationCanceledException when context.RequestAborted.IsCancellationRequested:
-                // The client went away; nothing to send.
+                // The client went away (a page changed or React Query cancelled the
+                // request). Nothing to send; 499 keeps it out of the 500 counts.
+                context.Response.StatusCode = StatusCodes.Status499ClientClosedRequest;
                 return true;
 
             default:

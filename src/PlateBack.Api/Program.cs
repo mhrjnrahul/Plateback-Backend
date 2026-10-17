@@ -24,6 +24,7 @@ using PlateBack.Infrastructure.Storage;
 using Scalar.AspNetCore;
 
 using Serilog;
+using Serilog.Events;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -60,7 +61,9 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(policy => policy
     .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE")
     .AllowCredentials()));
 builder.Services.AddOutputCache(o =>
-    o.AddPolicy(CachePolicies.Impact, p => p.Expire(TimeSpan.FromMinutes(5))));
+    // No locking: with it, requests waiting for the first one share its result,
+    // so one browser cancelling its request failed the others with a 500.
+    o.AddPolicy(CachePolicies.Impact, p => p.Expire(TimeSpan.FromMinutes(5)).SetLocking(false)));
 builder.Services.AddPlateBackOpenApi();
 
 // ---------- Authentication and authorization ----------
@@ -150,8 +153,7 @@ app.UseExceptionHandler(new ExceptionHandlerOptions
 {
     // Expected failures (validation, 404, sold out...) are normal answers, not
     // errors to alert on; only unexpected exceptions are logged with a stack trace.
-    SuppressDiagnosticsCallback = context => context.Exception is AppException or DomainException
-        or Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException or BadHttpRequestException,
+    SuppressDiagnosticsCallback = context => IsExpected(context.HttpContext, context.Exception),
 });
 app.UseStatusCodePages(async context =>
 {
@@ -176,7 +178,12 @@ app.Use((context, next) =>
     headers["Referrer-Policy"] = "no-referrer";
     return next(context);
 });
-app.UseSerilogRequestLogging();
+// This middleware sees exceptions before ApiExceptionHandler turns them into
+// 4xx answers, so it would log "sold out" or a bad code as a 500 error.
+app.UseSerilogRequestLogging(o => o.GetLevel = (http, _, exception) =>
+    exception is not null ? (IsExpected(http, exception) ? LogEventLevel.Information : LogEventLevel.Error)
+    : http.Response.StatusCode >= 500 ? LogEventLevel.Error
+    : LogEventLevel.Information);
 if (!app.Environment.IsDevelopment() && !app.Environment.IsEnvironment("Testing"))
 {
     app.UseHsts();
@@ -219,6 +226,13 @@ api.MapAdminEndpoints();
 api.MapUploadEndpoints();
 
 app.Run();
+
+// Normal answers (validation, not found, sold out...) and requests the browser
+// cancelled are not server errors, so they are not logged as errors.
+static bool IsExpected(HttpContext http, Exception exception) =>
+    exception is AppException or DomainException or DbUpdateConcurrencyException
+        or UniqueConstraintException or BadHttpRequestException
+    || (exception is OperationCanceledException && http.RequestAborted.IsCancellationRequested);
 
 /// <summary>Entry point; public so the integration tests can host the API in memory.</summary>
 public partial class Program;
