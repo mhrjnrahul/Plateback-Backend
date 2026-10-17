@@ -68,3 +68,17 @@ One entry per decision: the problem, the options considered, the choice and what
 - **Options:** Store bytes in PostgreSQL. A cloud bucket (S3, Azure Blob). A folder served by the API.
 - **Choice:** A folder (`uploads/`) behind an `IImageStorage` interface, served as static files with `X-Content-Type-Options: nosniff`. The file type is checked from its first bytes and the name is random.
 - **Trade-off:** Works for one server only. Week 6 can swap in cloud storage without touching the use cases.
+
+### 9. SignalR pushes ids, the browser refetches (Week 4)
+
+- **Problem:** The frontend polled stock every 15 seconds, so a customer could look at a portion that was already gone, and the counter queue lagged behind new reservations. The Week 4 brief asks for real-time interaction.
+- **Options:** Faster polling. Push the changed data itself over SignalR. Push only "this changed" with ids, and let the browser refetch through the normal endpoints.
+- **Choice:** Ids only, through one hub (`/hubs/live`). Handlers call an `ILiveUpdates` port after their transaction commits; the Api project implements it with SignalR. Stock goes to everyone, business queues only to members who joined their group (checked in the database), notifications only to their users.
+- **Trade-off:** One extra request per change for each open page, instead of none. In return there is one source of truth: no second serializer to keep in step with the DTOs, no permission rules to repeat in the hub, and nothing can arrive out of order and show stale stock. Pushes are best effort, so the browser keeps polling slowly (every minute) as a safety net. One server only; several would need a Redis backplane.
+
+### 10. A 30-second grace window for rotated refresh tokens (Week 4)
+
+- **Problem:** Connecting the frontend showed that two refreshes often arrive with the same cookie: React runs effects twice in development, two tabs restore their session together, and a page reloading mid-refresh never receives the new cookie. The reuse detection from Week 3 took the second one as theft and ended the session.
+- **Options:** Drop reuse detection. Let the frontend send one refresh at a time and change nothing on the server. Accept a just-rotated token for a short time.
+- **Choice:** Both of the last two. The frontend shares one refresh request. The API accepts a token rotated less than 30 seconds ago and answers with an access token only, leaving the browser's newer cookie alone. Reuse after that still revokes every session.
+- **Trade-off:** A stolen token replayed within 30 seconds of its rotation gets one 15-minute access token, not a session. Two tabs, double mounts and reloads no longer sign people out.

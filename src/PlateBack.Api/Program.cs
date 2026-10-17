@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
@@ -10,6 +11,7 @@ using Microsoft.IdentityModel.Tokens;
 using PlateBack.Api.Endpoints;
 using PlateBack.Api.Extensions;
 using PlateBack.Api.Middleware;
+using PlateBack.Api.Realtime;
 using PlateBack.Application;
 using PlateBack.Application.Common.Abstractions;
 using PlateBack.Application.Common.Errors;
@@ -65,6 +67,9 @@ builder.Services.AddOutputCache(o =>
     // so one browser cancelling its request failed the others with a 500.
     o.AddPolicy(CachePolicies.Impact, p => p.Expire(TimeSpan.FromMinutes(5)).SetLocking(false)));
 builder.Services.AddPlateBackOpenApi();
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IUserIdProvider, SubjectUserIdProvider>();
+builder.Services.AddSingleton<ILiveUpdates, SignalRLiveUpdates>();
 
 // ---------- Authentication and authorization ----------
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
@@ -99,6 +104,17 @@ builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSc
         };
         options.Events = new JwtBearerEvents
         {
+            // Browsers cannot set headers on a WebSocket, so the SignalR client
+            // sends the token in the query string; accept it on the hub only.
+            OnMessageReceived = context =>
+            {
+                if (context.HttpContext.Request.Path.StartsWithSegments(LiveHub.Path)
+                    && context.Request.Query["access_token"] is [{ Length: > 0 } token])
+                {
+                    context.Token = token;
+                }
+                return Task.CompletedTask;
+            },
             // 401s and 403s use the same ProblemDetails shape as every other error.
             OnChallenge = async context =>
             {
@@ -224,6 +240,7 @@ api.MapReservationEndpoints();
 api.MapNotificationEndpoints();
 api.MapAdminEndpoints();
 api.MapUploadEndpoints();
+app.MapHub<LiveHub>(LiveHub.Path);
 
 app.Run();
 

@@ -146,7 +146,7 @@ public sealed class GetOrganizationListingsHandler(IAppDbContext db, ICurrentUse
 
 /// <summary>POST /organizations/{orgId}/listings: verified businesses only.</summary>
 public sealed class CreateListingHandler(
-    IAppDbContext db, ICurrentUser currentUser, IOptions<BusinessRules> rules, TimeProvider time)
+    IAppDbContext db, ICurrentUser currentUser, IOptions<BusinessRules> rules, ILiveUpdates live, TimeProvider time)
 {
     public async Task<ListingDetailDto> HandleAsync(Guid organizationId, ListingInput input, CancellationToken cancellationToken)
     {
@@ -163,13 +163,15 @@ public sealed class CreateListingHandler(
         db.Listings.Add(listing);
         db.Audit(userId, "ListingCreated", nameof(Listing), listing.Id, now);
         await db.SaveChangesAsync(cancellationToken);
+        await live.ListingsChangedAsync([listing.Id]);
+        await live.OrganizationChangedAsync(organization.Id);
         return ListingDetailDto.From(listing, organization, rules.Value.MaxPerListing);
     }
 }
 
 /// <summary>PUT /listings/{id}: quantity cannot drop below what is already reserved.</summary>
 public sealed class UpdateListingHandler(
-    IAppDbContext db, ICurrentUser currentUser, IOptions<BusinessRules> rules, TimeProvider time)
+    IAppDbContext db, ICurrentUser currentUser, IOptions<BusinessRules> rules, ILiveUpdates live, TimeProvider time)
 {
     public async Task<ListingDetailDto> HandleAsync(Guid id, ListingInput input, CancellationToken cancellationToken)
     {
@@ -183,13 +185,15 @@ public sealed class UpdateListingHandler(
         // A concurrent reservation changes the row version, so this save fails
         // with 409 instead of overwriting the new stock count.
         await db.SaveChangesAsync(cancellationToken);
+        await live.ListingsChangedAsync([listing.Id]);
+        await live.OrganizationChangedAsync(organization.Id);
         return ListingDetailDto.From(listing, organization, rules.Value.MaxPerListing);
     }
 }
 
 /// <summary>POST /listings/{id}/cancel: also cancels its reservations (no penalty) and tells the customers.</summary>
 public sealed class CancelListingHandler(
-    IAppDbContext db, ICurrentUser currentUser, IOptions<BusinessRules> rules, TimeProvider time)
+    IAppDbContext db, ICurrentUser currentUser, IOptions<BusinessRules> rules, ILiveUpdates live, TimeProvider time)
 {
     public async Task<ListingDetailDto> HandleAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -202,6 +206,8 @@ public sealed class CancelListingHandler(
         await ListingCancellation.CancelReservationsAsync(db, listing, organization.Name, now, cancellationToken);
         db.Audit(userId, "ListingCancelled", nameof(Listing), listing.Id, now);
         await db.SaveChangesAsync(cancellationToken);
+        await live.ListingsChangedAsync([listing.Id]);
+        await live.OrganizationChangedAsync(organization.Id);
         return ListingDetailDto.From(listing, organization, rules.Value.MaxPerListing);
     }
 }

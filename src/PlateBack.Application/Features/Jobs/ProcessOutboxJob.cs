@@ -6,10 +6,10 @@ namespace PlateBack.Application.Features.Jobs;
 
 /// <summary>
 /// Runs every 10 seconds: turns pending outbox messages into in-app
-/// notifications. Later weeks add SignalR pushes and email here. A message
+/// notifications and tells the recipients' browsers over SignalR. A message
 /// that fails is retried up to 5 times, then kept with its last error.
 /// </summary>
-public sealed class ProcessOutboxJob(IAppDbContext db, TimeProvider time)
+public sealed class ProcessOutboxJob(IAppDbContext db, ILiveUpdates live, TimeProvider time)
 {
     private const int BatchSize = 100;
 
@@ -20,11 +20,12 @@ public sealed class ProcessOutboxJob(IAppDbContext db, TimeProvider time)
         await using var transaction = await db.BeginTransactionAsync(cancellationToken);
         var messages = await db.ClaimOutboxBatchAsync(BatchSize, cancellationToken);
         var delivered = 0;
+        HashSet<Guid> recipients = [];
         foreach (var message in messages)
         {
             try
             {
-                Deliver(message);
+                recipients.UnionWith(Deliver(message));
                 message.MarkProcessed(now);
                 delivered++;
             }
@@ -35,10 +36,12 @@ public sealed class ProcessOutboxJob(IAppDbContext db, TimeProvider time)
         }
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        await live.NotificationsChangedAsync(recipients);
         return delivered;
     }
 
-    private void Deliver(OutboxMessage message)
+    /// <returns>The users who got a notification.</returns>
+    private IReadOnlyCollection<Guid> Deliver(OutboxMessage message)
     {
         if (message.Type != NotificationMessage.MessageType)
         {
@@ -50,5 +53,6 @@ public sealed class ProcessOutboxJob(IAppDbContext db, TimeProvider time)
         {
             db.Notifications.Add(Notification.Create(userId, payload.Type, payload.Title, payload.Body, payload.Data, message.OccurredAt));
         }
+        return payload.UserIds;
     }
 }

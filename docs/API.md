@@ -11,6 +11,7 @@ Examples are real responses from the demo data (shortened where marked with `...
 - [Conventions](#conventions)
 - [Errors](#errors)
 - [Auth](#auth) · [Users](#users) · [Organizations](#organizations) · [Listings](#listings) · [Reservations](#reservations) · [Notifications](#notifications) · [Stats](#stats) · [Uploads](#uploads) · [Admin](#admin) · [Health](#health)
+- [Live updates (SignalR)](#live-updates-signalr)
 - [Enumerations](#enumerations)
 
 ## Conventions
@@ -563,6 +564,41 @@ Query: `entityType` (for example `Reservation`), `entityId`, `actorId`, `page`, 
 ### GET /health
 
 Outside `/api/v1`, public. **200** `{ "status": "Healthy", "database": "Connected" }`, or **503** when the database cannot be reached.
+
+## Live updates (SignalR)
+
+Added in Week 4. A SignalR hub at **`/hubs/live`** (not under `/api/v1`) tells browsers that something changed, so they refetch it at once instead of waiting for the next poll. Messages carry ids only; the data still comes from the endpoints above with their normal permission checks.
+
+| | |
+| --- | --- |
+| Connect | Public. Signed-in clients pass the access token as `access_token` in the query string, because browsers cannot set headers on a WebSocket; the API accepts it there for the hub only. |
+| Transports | WebSockets, then Server-Sent Events, then long polling. |
+| Delivery | Best effort, after the change is committed. A client that was disconnected should refetch once when it reconnects. |
+
+**Server to client**
+
+| Message | Sent to | Payload | Meaning |
+| --- | --- | --- | --- |
+| `ListingsChanged` | Everyone | `{ "listingIds": ["..."] }` | Stock, status or details changed: a reservation, a cancel, a new or edited listing, expiry, an admin removal. |
+| `OrganizationChanged` | Members of that business who called `WatchOrganization` | `{ "organizationId": "..." }` | The counter queue, listings or dashboard numbers changed. |
+| `NotificationsChanged` | The users concerned | `{}` | The outbox job delivered new notifications (within about 10 seconds of the change). |
+
+**Client to server**
+
+| Method | Access | Effect |
+| --- | --- | --- |
+| `WatchOrganization(organizationId)` | Member | Joins that business's group. Anyone else gets a `HubException` ("You are not a member of this business."). |
+| `UnwatchOrganization(organizationId)` | Signed in | Leaves the group. |
+
+```js
+const connection = new signalR.HubConnectionBuilder()
+  .withUrl("/hubs/live", { accessTokenFactory: () => accessToken })
+  .withAutomaticReconnect()
+  .build();
+connection.on("ListingsChanged", ({ listingIds }) => refetchListings(listingIds));
+await connection.start();
+await connection.invoke("WatchOrganization", organizationId);
+```
 
 ## Enumerations
 

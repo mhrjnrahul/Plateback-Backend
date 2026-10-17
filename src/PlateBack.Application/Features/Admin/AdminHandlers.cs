@@ -58,7 +58,7 @@ public sealed class GetOrganizationsForReviewHandler(IAppDbContext db, IIdentity
 /// listings. The owners are told either way.
 /// </summary>
 public sealed class ReviewOrganizationHandler(
-    IAppDbContext db, ICurrentUser currentUser, GetOrganizationsForReviewHandler reviewItems, TimeProvider time)
+    IAppDbContext db, ICurrentUser currentUser, GetOrganizationsForReviewHandler reviewItems, ILiveUpdates live, TimeProvider time)
 {
     public Task<OrganizationReviewItemDto> VerifyAsync(Guid id, CancellationToken cancellationToken) =>
         DecideAsync(id, null, (o, adminId, now) => o.Verify(adminId, now), "OrganizationVerified", cancellationToken);
@@ -78,13 +78,15 @@ public sealed class ReviewOrganizationHandler(
             ?? throw AppException.NotFound("Organization");
         decide(organization, adminId, now);
 
+        List<Guid> cancelled = [];
         if (organization.Status == OrganizationStatus.Suspended)
         {
-            var live = await db.Listings
+            var open = await db.Listings
                 .Where(l => l.OrganizationId == id && (l.Status == ListingStatus.Active || l.Status == ListingStatus.SoldOut))
                 .ToListAsync(cancellationToken);
-            foreach (var listing in live)
+            foreach (var listing in open)
             {
+                cancelled.Add(listing.Id);
                 listing.Cancel(now);
                 await ListingCancellation.CancelReservationsAsync(db, listing, organization.Name, now, cancellationToken);
             }
@@ -104,6 +106,8 @@ public sealed class ReviewOrganizationHandler(
             db.Notify(owners, NotificationType.OrganizationRejected, title, $"{organization.Name}: {organization.RejectionReason}", now, link);
         }
         await db.SaveChangesAsync(cancellationToken);
+        await live.ListingsChangedAsync(cancelled);
+        await live.OrganizationChangedAsync(organization.Id);
         return (await reviewItems.ToItemsAsync([organization], cancellationToken))[0];
     }
 }
@@ -159,7 +163,7 @@ public sealed class SuspendUserHandler(IAppDbContext db, ICurrentUser currentUse
 }
 
 /// <summary>POST /admin/listings/{id}/remove: take a listing down with a reason.</summary>
-public sealed class RemoveListingHandler(IAppDbContext db, ICurrentUser currentUser, TimeProvider time)
+public sealed class RemoveListingHandler(IAppDbContext db, ICurrentUser currentUser, ILiveUpdates live, TimeProvider time)
 {
     public async Task HandleAsync(Guid id, ReasonRequest request, CancellationToken cancellationToken)
     {
@@ -174,6 +178,8 @@ public sealed class RemoveListingHandler(IAppDbContext db, ICurrentUser currentU
             "Listing removed by PlateBack", $"{listing.Title}: {listing.RemovalReason}", now,
             new() { ["listingId"] = id.ToString() });
         await db.SaveChangesAsync(cancellationToken);
+        await live.ListingsChangedAsync([id]);
+        await live.OrganizationChangedAsync(organization.Id);
     }
 }
 

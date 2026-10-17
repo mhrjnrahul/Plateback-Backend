@@ -22,7 +22,7 @@ namespace PlateBack.Application.Features.Reservations;
 /// 4. insert the reservation, audit row and notifications.
 /// </summary>
 public sealed class ReserveListingHandler(
-    IAppDbContext db, ICurrentUser currentUser, IOptions<BusinessRules> rules, TimeProvider time)
+    IAppDbContext db, ICurrentUser currentUser, IOptions<BusinessRules> rules, ILiveUpdates live, TimeProvider time)
 {
     public async Task<ReservationDto> HandleAsync(Guid listingId, CreateReservationRequest request, CancellationToken cancellationToken)
     {
@@ -83,6 +83,8 @@ public sealed class ReserveListingHandler(
 
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        await live.ListingsChangedAsync([listingId]);
+        await live.OrganizationChangedAsync(listing.OrganizationId);
         return ReservationDto.From(reservation);
     }
 
@@ -159,7 +161,7 @@ public sealed class GetReservationHandler(IAppDbContext db, ICurrentUser current
 /// cancellation (-5 reliability) after. Stock goes back while the listing is open.
 /// </summary>
 public sealed class CancelReservationHandler(
-    IAppDbContext db, ICurrentUser currentUser, IOptions<BusinessRules> rules, TimeProvider time)
+    IAppDbContext db, ICurrentUser currentUser, IOptions<BusinessRules> rules, ILiveUpdates live, TimeProvider time)
 {
     public async Task<ReservationDto> HandleAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -187,6 +189,8 @@ public sealed class CancelReservationHandler(
         await db.SaveChangesAsync(cancellationToken);
         await db.ReturnStockAsync(listing.Id, reservation.Quantity, now, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        await live.ListingsChangedAsync([listing.Id]);
+        await live.OrganizationChangedAsync(listing.OrganizationId);
         return ReservationDto.From(reservation);
     }
 }
@@ -196,7 +200,7 @@ public sealed class CancelReservationHandler(
 /// A code from another business fails exactly like an unknown code.
 /// </summary>
 public sealed class VerifyPickupHandler(
-    IAppDbContext db, ICurrentUser currentUser, IOptions<BusinessRules> rules, TimeProvider time)
+    IAppDbContext db, ICurrentUser currentUser, IOptions<BusinessRules> rules, ILiveUpdates live, TimeProvider time)
 {
     public async Task<OrganizationReservationDto> HandleAsync(VerifyPickupRequest request, CancellationToken cancellationToken)
     {
@@ -221,6 +225,7 @@ public sealed class VerifyPickupHandler(
         db.Notify(customer.Id, NotificationType.ReservationCollected, "Thanks for rescuing food!",
             $"Collected: {listing.Title}.", now, new() { ["reservationId"] = reservation.Id.ToString() });
         await db.SaveChangesAsync(cancellationToken);
+        await live.OrganizationChangedAsync(listing.OrganizationId);
         return OrganizationReservationDto.From(reservation, customer.DisplayName, listing.Title);
     }
 }

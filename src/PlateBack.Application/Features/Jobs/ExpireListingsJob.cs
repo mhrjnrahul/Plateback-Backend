@@ -14,7 +14,7 @@ namespace PlateBack.Application.Features.Jobs;
 /// 20 reliability. Rows are claimed with SKIP LOCKED and changed only if still
 /// due, so running it twice, or on two servers, never applies a penalty twice.
 /// </summary>
-public sealed class ExpireListingsJob(IAppDbContext db, IOptions<BusinessRules> rules, TimeProvider time)
+public sealed class ExpireListingsJob(IAppDbContext db, IOptions<BusinessRules> rules, ILiveUpdates live, TimeProvider time)
 {
     private const int BatchSize = 200;
 
@@ -25,20 +25,20 @@ public sealed class ExpireListingsJob(IAppDbContext db, IOptions<BusinessRules> 
         await using var transaction = await db.BeginTransactionAsync(cancellationToken);
 
         var listings = await db.ClaimDueListingsAsync(now, BatchSize, cancellationToken);
-        var expired = 0;
+        List<Guid> expired = [];
         foreach (var listing in listings.Where(l => l.TryExpire(now)))
         {
-            expired++;
+            expired.Add(listing.Id);
             db.Audit(null, "ListingExpired", "Listing", listing.Id, now);
         }
 
         var reservations = await db.ClaimDueNoShowsAsync(now, BatchSize, cancellationToken);
         var userIds = reservations.Select(r => r.UserId).Distinct().ToList();
         var users = await db.Users.Where(u => userIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, cancellationToken);
-        var noShows = 0;
+        List<Guid> noShowListings = [];
         foreach (var reservation in reservations.Where(r => r.TryMarkNoShow(now)))
         {
-            noShows++;
+            noShowListings.Add(reservation.ListingId);
             users[reservation.UserId].ApplyNoShow(rules.Value);
             db.Audit(null, "ReservationNoShow", "Reservation", reservation.Id, now);
             db.Notify(reservation.UserId, NotificationType.ReservationNoShow, "Reservation not collected",
@@ -48,6 +48,27 @@ public sealed class ExpireListingsJob(IAppDbContext db, IOptions<BusinessRules> 
 
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return (expired, noShows);
+        await PushAsync(expired, noShowListings, cancellationToken);
+        return (expired.Count, noShowListings.Count);
+    }
+
+    /// <summary>Browsers drop expired listings; the businesses involved refresh their queues.</summary>
+    private async Task PushAsync(List<Guid> expired, List<Guid> noShowListings, CancellationToken cancellationToken)
+    {
+        if (expired.Count == 0 && noShowListings.Count == 0)
+        {
+            return;
+        }
+        await live.ListingsChangedAsync(expired);
+        var listingIds = expired.Concat(noShowListings).Distinct().ToList();
+        var organizationIds = await db.Listings
+            .Where(l => listingIds.Contains(l.Id))
+            .Select(l => l.OrganizationId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        foreach (var organizationId in organizationIds)
+        {
+            await live.OrganizationChangedAsync(organizationId);
+        }
     }
 }
