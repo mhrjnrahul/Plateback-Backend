@@ -13,4 +13,8 @@ public sealed record AuthResponse(string AccessToken, int ExpiresIn, CurrentUser
 /// What a successful sign-in produces. The refresh token never goes in a
 /// response body; the API puts it in an httpOnly cookie.
 /// </summary>
-public sealed record AuthResult(AuthResponse Response, string RefreshToken, DateTimeOffset RefreshTokenExpiresAt);
+/// <summary>
+/// A signed-in result. RefreshToken is null when the browser already holds the
+/// current one (a refresh inside the reuse grace window), so the cookie is left alone.
+/// </summary>
+public sealed record AuthResult(AuthResponse Response, string? RefreshToken, DateTimeOffset RefreshTokenExpiresAt);

@@ -1,3 +1,5 @@
+using PlateBack.Application.Features.Auth;
+
 namespace PlateBack.Api.Extensions;
 
 /// <summary>
@@ -9,8 +11,14 @@ internal static class RefreshCookie
     public const string Name = "plateback_refresh";
     public const string Path = "/api/v1/auth";
 
-    public static void Set(HttpResponse response, string token, DateTimeOffset expires) =>
-        response.Cookies.Append(Name, token, Options(expires));
+    /// <summary>Sets the cookie, unless the result kept the browser's current token.</summary>
+    public static void Set(HttpResponse response, AuthResult result)
+    {
+        if (result.RefreshToken is not null)
+        {
+            response.Cookies.Append(Name, result.RefreshToken, Options(result.RefreshTokenExpiresAt));
+        }
+    }
 
     public static void Clear(HttpResponse response) =>
         response.Cookies.Delete(Name, Options(DateTimeOffset.UnixEpoch));

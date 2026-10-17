@@ -13,7 +13,7 @@ internal static class AuthEndpoints
         auth.MapPost("/register", async (RegisterRequest request, RegisterHandler handler, HttpResponse response, CancellationToken ct) =>
             {
                 var result = await handler.HandleAsync(request, ct);
-                RefreshCookie.Set(response, result.RefreshToken, result.RefreshTokenExpiresAt);
+                RefreshCookie.Set(response, result);
                 return TypedResults.Created("/api/v1/users/me", result.Response);
             })
             .Validate<RegisterRequest>()
@@ -24,7 +24,7 @@ internal static class AuthEndpoints
         auth.MapPost("/login", async (LoginRequest request, LoginHandler handler, HttpResponse response, CancellationToken ct) =>
             {
                 var result = await handler.HandleAsync(request, ct);
-                RefreshCookie.Set(response, result.RefreshToken, result.RefreshTokenExpiresAt);
+                RefreshCookie.Set(response, result);
                 return TypedResults.Ok(result.Response);
             })
             .Validate<LoginRequest>()
@@ -39,7 +39,7 @@ internal static class AuthEndpoints
                 try
                 {
                     var result = await handler.HandleAsync(RefreshCookie.Read(request), ct);
-                    RefreshCookie.Set(response, result.RefreshToken, result.RefreshTokenExpiresAt);
+                    RefreshCookie.Set(response, result);
                     return TypedResults.Ok(result.Response);
                 }
                 catch

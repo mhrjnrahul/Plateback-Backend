@@ -33,6 +33,14 @@ public sealed class AuthSession(
         return (new AuthResult(new AuthResponse(accessToken, expiresIn, profile), raw, stored.ExpiresAt), stored);
     }
 
+    /// <summary>A new access token only; the refresh token in the browser stays as it is.</summary>
+    public async Task<AuthResult> AccessOnlyAsync(User user, CancellationToken cancellationToken)
+    {
+        var profile = await reader.ReadAsync(user, cancellationToken);
+        var (accessToken, expiresIn) = tokens.CreateAccessToken(user, profile.Email);
+        return new AuthResult(new AuthResponse(accessToken, expiresIn, profile), null, default);
+    }
+
     /// <summary>SHA-256 of the token, hex encoded. The database never sees the token itself.</summary>
     public static string Hash(string rawToken) =>
         Convert.ToHexStringLower(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(rawToken)));

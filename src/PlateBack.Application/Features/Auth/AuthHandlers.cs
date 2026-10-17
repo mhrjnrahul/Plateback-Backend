@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 using PlateBack.Application.Common;
 using PlateBack.Application.Common.Abstractions;
 using PlateBack.Application.Common.Errors;
+using PlateBack.Application.Common.Options;
 using PlateBack.Domain.Common;
 using PlateBack.Domain.Entities;
 
@@ -66,7 +68,7 @@ public sealed class LoginHandler(IAppDbContext db, IIdentityService identity, Au
 /// already rotated means it was copied, so every session of that user ends
 /// (reuse detection, design doc 4.6).
 /// </summary>
-public sealed class RefreshHandler(IAppDbContext db, AuthSession session, TimeProvider time)
+public sealed class RefreshHandler(IAppDbContext db, AuthSession session, IOptions<JwtOptions> options, TimeProvider time)
 {
     public async Task<AuthResult> HandleAsync(string? rawToken, CancellationToken cancellationToken)
     {
@@ -80,6 +82,14 @@ public sealed class RefreshHandler(IAppDbContext db, AuthSession session, TimePr
         var token = await db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == hash, cancellationToken)
             ?? throw expired;
 
+        if (token.WasRotated && now - token.RevokedAt < TimeSpan.FromSeconds(options.Value.RefreshReuseGraceSeconds))
+        {
+            // Two requests raced with the same cookie and the other one already
+            // rotated it. The browser keeps the replacement, so answer with an
+            // access token only and leave the cookie alone.
+            var racer = await db.Users.FirstOrDefaultAsync(u => u.Id == token.UserId, cancellationToken);
+            return racer is null || racer.IsSuspended ? throw expired : await session.AccessOnlyAsync(racer, cancellationToken);
+        }
         if (token.WasRotated)
         {
             await RevokeAllAsync(token.UserId, now, cancellationToken);

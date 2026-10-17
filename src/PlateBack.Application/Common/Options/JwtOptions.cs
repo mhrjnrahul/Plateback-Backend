@@ -22,4 +22,12 @@ public sealed class JwtOptions
 
     [Range(1, 30)]
     public int RefreshTokenDays { get; set; } = 7;
+
+    /// <summary>
+    /// How long a just-rotated refresh token is still accepted (without
+    /// rotating again) before reuse counts as theft. Covers two tabs, or a
+    /// React double mount, refreshing with the same cookie at once.
+    /// </summary>
+    [Range(0, 120)]
+    public int RefreshReuseGraceSeconds { get; set; } = 30;
 }

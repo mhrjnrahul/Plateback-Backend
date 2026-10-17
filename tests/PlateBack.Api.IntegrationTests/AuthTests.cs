@@ -108,10 +108,31 @@ public class AuthTests(PlateBackFactory factory) : ApiTestBase(factory)
         var second = RefreshCookieFrom(refreshed);
         second.ShouldNotBe(first);
 
-        // Someone replays the first (already rotated) token: theft is assumed.
+        // Someone replays the first (already rotated) token after the grace
+        // window: theft is assumed.
+        Clock.Advance(TimeSpan.FromMinutes(1));
         await ProblemAsync(await RefreshAsync(first), HttpStatusCode.Unauthorized, "UNAUTHENTICATED");
         // ...so the legitimate newer token stops working too.
         await ProblemAsync(await RefreshAsync(second), HttpStatusCode.Unauthorized, "UNAUTHENTICATED");
+    }
+
+    [Fact]
+    public async Task Two_refreshes_with_the_same_cookie_at_once_keep_the_session()
+    {
+        // A React double mount or two tabs send the same cookie twice; the
+        // second arrives just after the first rotated it.
+        var login = await Anonymous().PostAsJsonAsync("/api/v1/auth/login",
+            new { email = "maya@example.com", password = "password123" }, Ct);
+        var first = RefreshCookieFrom(login);
+        var second = RefreshCookieFrom(await RefreshAsync(first));
+
+        Clock.Advance(TimeSpan.FromSeconds(5));
+        var racer = await RefreshAsync(first);
+        racer.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await ReadAsync<AuthBody>(racer)).AccessToken.ShouldNotBeNullOrEmpty();
+        // The cookie is left alone: the browser already holds the replacement.
+        racer.Headers.Contains("Set-Cookie").ShouldBeFalse();
+        (await RefreshAsync(second)).StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
     [Fact]
