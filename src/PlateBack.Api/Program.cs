@@ -167,9 +167,9 @@ if (args.Contains("seed"))
 
 app.UseExceptionHandler(new ExceptionHandlerOptions
 {
-    // Expected failures (validation, 404, sold out...) are normal answers, not
-    // errors to alert on; only unexpected exceptions are logged with a stack trace.
-    SuppressDiagnosticsCallback = context => IsExpected(context.HttpContext, context.Exception),
+    // Never log here: the request log below writes each failure once, with its
+    // trace id and stack trace. Logging here too gave every 500 a second copy.
+    SuppressDiagnosticsCallback = _ => true,
 });
 app.UseStatusCodePages(async context =>
 {
@@ -194,8 +194,9 @@ app.Use((context, next) =>
     headers["Referrer-Policy"] = "no-referrer";
     return next(context);
 });
-// This middleware sees exceptions before ApiExceptionHandler turns them into
-// 4xx answers, so it would log "sold out" or a bad code as a 500 error.
+// The one log entry per request. It sees exceptions before ApiExceptionHandler
+// turns them into answers, so expected ones (sold out, a bad code) are logged
+// as Information and only unexpected ones as Error, with the stack trace.
 app.UseSerilogRequestLogging(o => o.GetLevel = (http, _, exception) =>
     exception is not null ? (IsExpected(http, exception) ? LogEventLevel.Information : LogEventLevel.Error)
     : http.Response.StatusCode >= 500 ? LogEventLevel.Error

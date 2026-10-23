@@ -9,10 +9,10 @@ namespace PlateBack.Api.Middleware;
 
 /// <summary>
 /// Turns exceptions into ProblemDetails responses with the right status and
-/// code. Unexpected errors become a 500 without internal details; they are
-/// logged with the request's trace id so they can be found.
+/// code. Unexpected errors become a 500 without internal details; the request
+/// log records them once, under the trace id the client is shown.
 /// </summary>
-internal sealed partial class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) : IExceptionHandler
+internal sealed class ApiExceptionHandler : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext context, Exception exception, CancellationToken cancellationToken)
     {
@@ -59,7 +59,6 @@ internal sealed partial class ApiExceptionHandler(ILogger<ApiExceptionHandler> l
                 return true;
 
             default:
-                LogUnhandled(logger, exception, context.Request.Method, context.Request.Path);
                 await Problems.WriteAsync(context, 500, ErrorCodes.InternalError, "Something went wrong",
                     "An unexpected error occurred. Quote the trace id if you report it.");
                 break;
@@ -76,7 +75,4 @@ internal sealed partial class ApiExceptionHandler(ILogger<ApiExceptionHandler> l
         [ErrorCodes.CodeAlreadyUsed] = "Code already used",
         [ErrorCodes.InvalidState] = "Not allowed now",
     };
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "Unhandled exception for {Method} {Path}")]
-    private static partial void LogUnhandled(ILogger logger, Exception exception, string method, string path);
 }
