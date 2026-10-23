@@ -49,7 +49,7 @@ internal static class AuthEndpoints
                 }
             })
             .WithSummary("Get a new access token")
-            .WithDescription("Uses the refresh-token cookie, rotates it and returns a new access token. Reusing an old refresh token ends every session of that account.")
+            .WithDescription("Uses the refresh-token cookie, rotates it and returns a new access token. Reusing a token rotated more than 30 seconds ago ends every session of that account; inside that window only a new access token is returned.")
             .ProducesProblem(StatusCodes.Status401Unauthorized);
 
         auth.MapPost("/logout", async (LogoutHandler handler, HttpRequest request, HttpResponse response, CancellationToken ct) =>

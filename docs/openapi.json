@@ -152,7 +152,7 @@
                     "Auth"
                 ],
                 "summary": "Get a new access token",
-                "description": "Uses the refresh-token cookie, rotates it and returns a new access token. Reusing an old refresh token ends every session of that account.",
+                "description": "Uses the refresh-token cookie, rotates it and returns a new access token. Reusing a token rotated more than 30 seconds ago ends every session of that account; inside that window only a new access token is returned.",
                 "responses": {
                     "200": {
                         "description": "OK",

@@ -1,14 +1,17 @@
 # PlateBack: backend
 
-PlateBack lets bakeries, cafes and restaurants list end-of-day surplus food, and lets people nearby reserve it and collect it with a pickup code during a short window. This repository is the REST API (Week 3 of the YuvaIntern programme): ASP.NET Core on .NET 10 with PostgreSQL, built from the Week 1 design document. The React frontend is a separate repository and is connected to this API in Week 4.
+PlateBack lets bakeries, cafes and restaurants list end-of-day surplus food, and lets people nearby reserve it and collect it with a pickup code during a short window. This repository is the REST API: ASP.NET Core on .NET 10 with PostgreSQL, built in Week 3 of the YuvaIntern programme from the Week 1 design document, and connected to the [React frontend](https://github.com/mhrjnrahul/PlateBack---Frontend) in Week 4.
 
 - **API reference:** [docs/API.md](docs/API.md), plus the OpenAPI document [docs/openapi.json](docs/openapi.json) and an interactive page at `/scalar` while the API runs.
 - **Design decisions:** [docs/decisions.md](docs/decisions.md)
+- **Running the whole app (frontend and backend together):** see the [frontend repository's README](https://github.com/mhrjnrahul/PlateBack---Frontend#readme).
 - **Week 3 submission:** the ZIP of this repository is attached to the [week3 release](https://github.com/mhrjnrahul/Plateback-Backend/releases/tag/week3).
+- **Week 4 submission:** one ZIP with both projects is attached to the frontend's [week4 release](https://github.com/mhrjnrahul/PlateBack---Frontend/releases/tag/week4). What changed here is listed under [Week 4 changes](#week-4-changes).
 
 ## Contents
 
 - [Week 3 brief checklist](#week-3-brief-checklist)
+- [Week 4 changes](#week-4-changes)
 - [Run it locally](#run-it-locally)
 - [Configuration](#configuration)
 - [What the API does](#what-the-api-does)
@@ -31,10 +34,22 @@ PlateBack lets bakeries, cafes and restaurants list end-of-day surplus food, and
 | Secure authentication | ASP.NET Core Identity, 15-minute JWTs, rotating refresh tokens in httpOnly cookies, lockout and rate limiting ([Security](#security)) |
 | Error handling | Every error is RFC 9457 ProblemDetails with a stable `code` ([Error handling](#error-handling-and-validation)) |
 | Data validation | FluentValidation on every request body and query, and domain rules in the entities |
-| Tests | 156 tests: 52 domain, 24 application, 80 integration tests against real PostgreSQL ([Testing](#testing)) |
+| Tests | 163 tests: 52 domain, 24 application, 87 integration tests against real PostgreSQL ([Testing](#testing)) |
 | API documentation: endpoints, methods, parameters and responses | [docs/API.md](docs/API.md), [docs/openapi.json](docs/openapi.json) and the `/scalar` page |
 | A README with setup and execution instructions | This file ([Run it locally](#run-it-locally)) |
 | About 30 to 35 hours | About 30 to 35 hours ([Development process](#development-process)) |
+
+## Week 4 changes
+
+Connecting the frontend showed problems that tests against the API alone could not. Each change below came from that, and the [integration write-up](https://github.com/mhrjnrahul/PlateBack---Frontend/blob/main/docs/integration.md) has the evidence for each.
+
+| Change | Why |
+| --- | --- |
+| **SignalR hub at `/hubs/live`** ([docs/API.md](docs/API.md#live-updates-signalr), decision 9) | Stock, the counter queue and notifications reach open pages in about 0.2 seconds instead of on the next 15-second poll. |
+| **One log entry per failed request** | A single database failure wrote 5 error entries with 4 copies of the stack trace. Now the request log is the only one, with the trace id the client sees. |
+| **Cancelled requests answer 499** | React cancels requests it no longer needs; the API logged each one as a 500, and the impact-stats cache passed the cancellation on to other waiting requests. |
+| **30-second grace window for rotated refresh tokens** (decision 10) | Two refreshes with the same cookie (React's double mount, two tabs, a reload mid-refresh) looked like a stolen token and signed people out. |
+| **Upload URLs are site-relative** (`/uploads/...`) | Absolute URLs stored the API's own host (`localhost:5080`) in listings, which breaks behind a proxy or on another host. |
 
 ## Run it locally
 
@@ -122,7 +137,7 @@ The businesses are in Kathmandu, Lalitpur and Bhaktapur. Search around Thamel wi
 | Command | What it does |
 | --- | --- |
 | `dotnet build` | Builds everything; warnings fail the build |
-| `dotnet test` | Runs all 156 tests (PostgreSQL must be running) |
+| `dotnet test` | Runs all 163 tests (PostgreSQL must be running) |
 | `dotnet run --project src/PlateBack.Api` | Runs the API on http://localhost:5080 |
 | `dotnet run --project src/PlateBack.Api -- seed` | Migrates the database and resets the demo data |
 | `dotnet format --verify-no-changes` | Checks the code style from `.editorconfig` |
@@ -138,7 +153,8 @@ Settings come from `appsettings.json`, then user secrets (development), then env
 | `Jwt:Key` | (secret) | Signing key for access tokens, 32+ characters |
 | `Jwt:Issuer`, `Jwt:Audience` | `plateback-api`, `plateback-web` | Checked on every token |
 | `Jwt:AccessTokenMinutes`, `Jwt:RefreshTokenDays` | 15, 7 | Token lifetimes |
-| `Cors:Origins` | `http://localhost:5173` | Origins allowed to call the API (the frontend) |
+| `Jwt:RefreshReuseGraceSeconds` | 30 | How long a just-rotated refresh token still gets an access token (decision 10) |
+| `Cors:Origins` | `http://localhost:5173` | Origins allowed to call the API directly. The frontend's dev server proxies requests, so it does not need this |
 | `BusinessRules:*` | design doc 5.6 | Reservation limits, reliability changes, pickup window limits, search radius |
 | `RateLimits:AuthPerMinute`, `RateLimits:PickupCodesPerMinute` | 20, 30 | Rate limits |
 | `Uploads:Path` | `uploads` | Folder for listing photos |
@@ -156,6 +172,7 @@ The use cases from the design document, grouped as in [docs/API.md](docs/API.md)
 - **Administration:** the verification queue, verify, reject or suspend businesses, suspend or restore accounts, remove listings, and read the audit log.
 - **Background jobs:** every minute, listings past their window expire and uncollected reservations become no-shows (-20 reliability); every 10 seconds, the outbox is delivered as notifications.
 - **Photo upload** for listings.
+- **Live updates:** a SignalR hub tells open pages when stock, a business's queue or a user's notifications change, so they refetch at once.
 
 ## Tech stack
 
@@ -171,6 +188,7 @@ Versions are pinned in `Directory.Packages.props` (central package management).
 | Validation | FluentValidation 12 | Request rules in one class per request, mirrored by the frontend's forms |
 | Logging | Serilog | Structured logs with a correlation id on every line |
 | API docs | Microsoft.AspNetCore.OpenApi and Scalar | OpenAPI 3 generated from the endpoints, with an interactive page |
+| Live updates | ASP.NET Core SignalR | Part of the framework; WebSockets with automatic fallbacks, and the same JWT as the REST API |
 | Tests | xUnit v3, Shouldly, WebApplicationFactory | Unit tests and in-memory API tests against real PostgreSQL |
 
 MediatR and FluentAssertions, common choices for these jobs, were left out because of licence changes (decisions 1 and 2).
@@ -188,7 +206,8 @@ src/
                                Notifications, Admin, Stats, Uploads, Jobs
   PlateBack.Infrastructure/  EF Core context, mappings and migrations, Identity, JWT,
                              file storage, background job runner, demo data seeder
-  PlateBack.Api/             Program.cs, endpoint groups, error handling, auth setup
+  PlateBack.Api/             Program.cs, endpoint groups, error handling, auth setup,
+                             SignalR hub (Realtime/)
 tests/
   PlateBack.Domain.Tests/          rules of the entities (no database)
   PlateBack.Application.Tests/     validators and helpers (no database)
@@ -201,7 +220,7 @@ docs/
 
 - **Rich domain model.** State changes are methods with rules inside them (`reservation.Cancel(now, pickupStart)`, `listing.Update(...)`); there are no public setters.
 - **Use-case handlers.** One class per operation (`ReserveListingHandler`, `VerifyPickupHandler`), injected straight into the endpoint. No mediator (decision 1).
-- **Ports and adapters.** The Application layer defines `IAppDbContext`, `IIdentityService`, `ITokenService` and `IImageStorage`; Infrastructure implements them.
+- **Ports and adapters.** The Application layer defines `IAppDbContext`, `IIdentityService`, `ITokenService`, `IImageStorage` and `ILiveUpdates`; Infrastructure and the Api project implement them. Handlers call `ILiveUpdates` after their transaction commits, so a page is never told about a change that was rolled back.
 - **Transactional outbox.** Notifications are written in the same transaction as the change and delivered by a job, so they exist exactly when the change committed.
 - **Options pattern** for every setting, validated when the API starts.
 - **Injected clock.** Everything reads time from `TimeProvider`, so tests can move time.
@@ -248,14 +267,14 @@ WHERE  id = @listingId AND status = 'Active'
 | Concern | What the API does |
 | --- | --- |
 | Passwords | ASP.NET Core Identity (salted PBKDF2). Five wrong passwords lock the account for 15 minutes. |
-| Sessions | 15-minute JWT access tokens in the Authorization header. Refresh tokens are 256 random bits, stored only as SHA-256 hashes, sent in an httpOnly, Secure, SameSite=Strict cookie limited to `/api/v1/auth`, rotated on every use. Reusing a rotated token ends every session of that account. |
+| Sessions | 15-minute JWT access tokens in the Authorization header. Refresh tokens are 256 random bits, stored only as SHA-256 hashes, sent in an httpOnly, Secure, SameSite=Strict cookie limited to `/api/v1/auth`, rotated on every use. Reusing a token rotated more than 30 seconds ago ends every session of that account; inside that window it only gets an access token (decision 10). |
 | Authorization | Role policy for admin endpoints. Business membership is checked in the database on every request, not stored in the token, so removing someone takes effect immediately. Other people's reservations and unverified businesses answer 404, not 403, so ids are not confirmed. |
 | Brute force | Rate limits on register, login and refresh (per IP) and on pickup code checks (per user). Pickup codes are 8 characters from 31 (about 8.5 x 10^11 values). |
 | Injection | EF Core parameterises every query; the few hand-written statements use interpolated parameters, never string concatenation. |
 | Uploads | Type checked from the file's bytes, 10 MB limit, random file names, served with `nosniff`. |
 | Transport and browser | HTTPS redirection and HSTS outside development; CORS allows only the frontend's origin; `X-Frame-Options: DENY` and `Referrer-Policy: no-referrer`. |
 | Secrets | User secrets in development and environment variables elsewhere; nothing sensitive in the repository. The API will not start without them. |
-| Logging | Serilog with a correlation id; tokens and passwords are never logged. Unexpected errors return no internal details. |
+| Logging | Serilog with a correlation id; tokens and passwords are never logged (the SignalR token in the query string included, since request paths are logged without it). Unexpected errors return no internal details. |
 
 ## Error handling and validation
 
@@ -265,7 +284,15 @@ Every error is RFC 9457 ProblemDetails (`application/problem+json`) with a stabl
 - **Business rules:** the entities throw a `DomainException` with a code (for example `SOLD_OUT`) and, for input mistakes, the field it belongs to.
 - **Access:** use cases throw `AppException` for 401, 403 and 404.
 - **One exception handler** maps these, plus concurrency conflicts and malformed JSON, to ProblemDetails. Unknown routes and 401/403 from the authentication middleware use the same shape.
-- **Logging:** expected errors are not logged as errors. Unexpected ones are, with the trace id, and the client gets a generic 500.
+- **Logging:** each request writes one line, from the request log. Expected answers (validation, 404, sold out, a used code) are Information; only unexpected failures are Error, with the stack trace and the same trace id the client gets in its 500 response. EF Core's and the exception middleware's own copies of the same error are switched off, because they repeated the stack trace up to four times for one failure. `LoggingTests` checks this. For example, with the database password wrong, one request now logs:
+
+  ```
+  [08:29:11 ERR] HTTP GET /api/v1/listings responded 500 in 432.7543 ms 0HNPGLU1TK782:00000001
+  Npgsql.PostgresException (0x80004005): 28P01: password authentication failed for user "plateback"
+     at ...
+  ```
+
+  and the client receives `{"code":"INTERNAL_ERROR", ..., "traceId":"0HNPGLU1TK782:00000001"}`, so a user's report leads straight to the line.
 
 ## Testing
 
@@ -273,11 +300,11 @@ Every error is RFC 9457 ProblemDetails (`application/problem+json`) with a stabl
 dotnet test
 ```
 
-**156 tests, all passing:**
+**163 tests, all passing:**
 
 - **Domain (52):** the state rules of every entity. Examples: a collected reservation cannot be cancelled; the pickup window must be 15 to 720 minutes (14 and 721 fail); reliability stays between 0 and 100; a no-show is applied once.
 - **Application (24):** validators, the distance formula, file-type detection and paging defaults.
-- **Integration (80):** the real API hosted in memory with `WebApplicationFactory`, called over HTTP like the frontend would, against a real PostgreSQL database. Highlights:
+- **Integration (87):** the real API hosted in memory with `WebApplicationFactory`, called over HTTP like the frontend would, against a real PostgreSQL database. Highlights:
   - Ten customers race for the last portion: exactly one gets it, nine get `SOLD_OUT`, stock ends at 0.
   - One customer double-clicking Reserve five times gets one reservation.
   - Two parallel cancels return the stock once.
@@ -286,6 +313,9 @@ dotnet test
   - A staff member removed from a business loses access on their next request, with the same token.
   - After the pickup window, the expiry job marks no-shows once, even when run twice.
   - A text file renamed to `.jpg` is rejected.
+  - Two refreshes with the same cookie within 30 seconds keep the session (Week 4).
+  - SignalR: a visitor hears about stock changes, only a business's own staff hear about its queue, a customer cannot join a business's group, and notifications are pushed once the outbox delivers them (Week 4).
+  - A storage failure (a full disk) gives one Error log entry carrying the trace id the client sees; expected 4xx answers give none (Week 4).
 
 The integration tests use the database `plateback_test` on localhost with the `plateback` login (override with the `PLATEBACK_TEST_DB` environment variable). It is created on the first run. Before each test, all tables are emptied and the demo data loaded again. A test clock fixes "now" so the dashboard's "today" is always the same day.
 
@@ -300,9 +330,8 @@ The work took about 30 to 35 hours, within the time set for the Week 3 task.
 
 ## Known limitations
 
-- **Not connected to the frontend yet.** That is Week 4, along with SignalR for live stock (design decision D12). Until then, stock updates by polling.
 - **Recurring listings (F09)** and their daily job are not built. The frontend has no screen for them yet.
 - **Photos are stored on the API's disk.** Fine for one server; cloud storage is planned for deployment (Week 6).
-- **Parallel refreshes.** Two tabs refreshing at the same instant can look like token reuse and end the session. A short grace period would fix it if it shows up in Week 4.
+- **SignalR on one server.** Pushes go to clients connected to this instance. Running several instances would need a Redis backplane. Pushes are best effort, so pages still poll once a minute.
 - **No Docker setup.** PostgreSQL is installed locally. Containers can be added for deployment if Week 6 needs them.
 - **Email notifications (F20)** are not sent. The outbox job is where they would be added.

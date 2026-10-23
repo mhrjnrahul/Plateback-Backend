@@ -118,7 +118,7 @@ Public, rate limited.
 
 Uses the `plateback_refresh` cookie; no body. Rotates the refresh token (new cookie) and returns a new access token, same body as login.
 
-Presenting a refresh token that was already rotated means it was copied, so every session of that account is ended. **Errors:** 401 `UNAUTHENTICATED` (missing, expired, revoked or reused token; the cookie is cleared).
+Presenting a refresh token that was rotated more than 30 seconds ago means it was copied, so every session of that account is ended. Within 30 seconds it is treated as a race (two tabs, or a page reloading mid-refresh): the API returns a new access token and leaves the cookie alone, because the browser already holds the replacement. **Errors:** 401 `UNAUTHENTICATED` (missing, expired, revoked or reused token; the cookie is cleared).
 
 ### POST /auth/logout
 
