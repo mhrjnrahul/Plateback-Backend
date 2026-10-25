@@ -1,0 +1,65 @@
+# Builds the API and runs all three test projects against a real PostgreSQL,
+# the same way as on a developer machine (see README, Testing).
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: plateback
+          POSTGRES_PASSWORD: plateback
+          POSTGRES_DB: plateback
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U plateback"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore tools (ReportGenerator)
+        run: dotnet tool restore
+
+      # Debug, like local runs: Release builds count fewer coverable lines,
+      # so their coverage percentages would not compare with the README's.
+      - name: Build (warnings fail the build)
+        run: dotnet build
+
+      - name: Check code style
+        run: dotnet format --verify-no-changes --no-restore
+
+      - name: Test with coverage
+        # The integration tests create plateback_test on the service above.
+        run: >-
+          dotnet test --no-build --
+          --report-xunit-trx --report-xunit-html
+          --coverage --coverage-output-format cobertura --coverage-output coverage.cobertura.xml
+
+      - name: Coverage report
+        if: always()
+        run: >-
+          dotnet tool run reportgenerator
+          -reports:"tests/*/bin/Debug/net10.0/TestResults/coverage.cobertura.xml"
+          -targetdir:coverage -reporttypes:"Html;TextSummary;MarkdownSummaryGithub"
+          -assemblyfilters:"+PlateBack.*;-PlateBack.*.Tests;-PlateBack.Api.IntegrationTests"
+          -classfilters:"-PlateBack.Infrastructure.Persistence.Migrations.*"
+          && cat coverage/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: |
+            tests/*/bin/Debug/net10.0/TestResults/
+            coverage/
