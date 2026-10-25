@@ -1,0 +1,66 @@
+Timestamp,Provider,Counter Name,Counter Type,Mean/Increment
+10/25/2026 10:10:10,System.Runtime,dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=gen1],Metric,1990104
+10/25/2026 10:10:10,System.Runtime,dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=poh],Metric,123600
+10/25/2026 10:10:10,System.Runtime,dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=gen0],Metric,0
+10/25/2026 10:10:10,System.Runtime,dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=loh],Metric,2555904
+10/25/2026 10:10:10,System.Runtime,dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=gen2],Metric,36199016
+10/25/2026 10:10:10,Npgsql,db.client.operation.npgsql.bytes_written (By / 5 sec)[db.client.connection.pool.name=Host=localhost;Port=5432;Database=plateback;Username=plateback],Rate,326584
+10/25/2026 10:10:10,System.Runtime,dotnet.process.cpu.count ({cpu}),Metric,12
+10/25/2026 10:10:10,Microsoft.AspNetCore.Hosting,http.server.active_requests ({request})[http.request.method=GET;url.scheme=http],Metric,15
+10/25/2026 10:10:10,Microsoft.AspNetCore.Hosting,http.server.request.duration (s)[http.request.method=GET;http.response.status_code=200;http.route=/api/v1/listings/;network.protocol.version=1.1;url.scheme=http;Percentile=50],Metric,0.185546875
+10/25/2026 10:10:10,Microsoft.AspNetCore.Hosting,http.server.request.duration (s)[http.request.method=GET;http.response.status_code=200;http.route=/api/v1/listings/;network.protocol.version=1.1;url.scheme=http;Percentile=95],Metric,0.33056640625
+10/25/2026 10:10:10,Microsoft.AspNetCore.Hosting,http.server.request.duration (s)[http.request.method=GET;http.response.status_code=200;http.route=/api/v1/listings/;network.protocol.version=1.1;url.scheme=http;Percentile=99],Metric,0.38720703125
+10/25/2026 10:10:10,Npgsql,db.client.connection.count ({connection})[db.client.connection.pool.name=Host=localhost;Port=5432;Database=plateback;Username=plateback;db.client.connection.state=idle],Metric,24
+10/25/2026 10:10:10,Npgsql,db.client.connection.count ({connection})[db.client.connection.pool.name=Host=localhost;Port=5432;Database=plateback;Username=plateback;db.client.connection.state=used],Metric,11
+10/25/2026 10:10:10,System.Runtime,dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=gen1],Metric,119672568
+10/25/2026 10:10:10,System.Runtime,dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=poh],Metric,589104
+10/25/2026 10:10:10,System.Runtime,dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=gen0],Metric,0
+10/25/2026 10:10:10,System.Runtime,dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=loh],Metric,12187928
+10/25/2026 10:10:10,System.Runtime,dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=gen2],Metric,321370240
+10/25/2026 10:10:10,Npgsql,db.client.operation.duration (s)[db.client.connection.pool.name=Host=localhost;Port=5432;Database=plateback;Username=plateback;db.system.name=postgresql;server.address=localhost;server.port=5432;Percentile=50],Metric,0.1484375
+10/25/2026 10:10:10,Npgsql,db.client.operation.duration (s)[db.client.connection.pool.name=Host=localhost;Port=5432;Database=plateback;Username=plateback;db.system.name=postgresql;server.address=localhost;server.port=5432;Percentile=95],Metric,0.28515625
+10/25/2026 10:10:10,Npgsql,db.client.operation.duration (s)[db.client.connection.pool.name=Host=localhost;Port=5432;Database=plateback;Username=plateback;db.system.name=postgresql;server.address=localhost;server.port=5432;Percentile=99],Metric,0.3330078125
+10/25/2026 10:10:10,Npgsql,db.client.operation.npgsql.prepared_ratio[db.client.connection.pool.name=Host=localhost;Port=5432;Database=plateback;Username=plateback],Metric,0
+10/25/2026 10:10:10,Npgsql,db.client.operation.npgsql.bytes_read (By / 5 sec)[db.client.connection.pool.name=Host=localhost;Port=5432;Database=plateback;Username=plateback],Rate,1690123495
+10/25/2026 10:10:10,System.Runtime,dotnet.timer.count ({timer}),Metric,7
+10/25/2026 10:10:10,Npgsql,db.client.operation.npgsql.executing ({command})[db.client.connection.pool.name=Host=localhost;Port=5432;Database=plateback;Username=plateback],Metric,-1
+10/25/2026 10:10:10,Npgsql,db.client.connection.max ({connection})[db.client.connection.pool.name=Host=localhost;Port=5432;Database=plateback;Username=plateback],Metric,100
+10/25/2026 10:10:10,System.Runtime,dotnet.process.memory.working_set (By),Metric,1154863104
+10/25/2026 10:10:10,System.Runtime,dotnet.assembly.count ({assembly}),Metric,178
+10/25/2026 10:10:10,System.Runtime,dotnet.gc.last_collection.memory.committed_size (By),Metric,879996928
+10/25/2026 10:10:15,System.Runtime,dotnet.gc.collections ({collection} / 5 sec)[gc.heap.generation=gen1],Rate,17
+10/25/2026 10:10:15,System.Runtime,dotnet.gc.collections ({collection} / 5 sec)[gc.heap.generation=gen0],Rate,25
+10/25/2026 10:10:15,System.Runtime,dotnet.gc.collections ({collection} / 5 sec)[gc.heap.generation=gen2],Rate,8
+10/25/2026 10:10:15,System.Runtime,dotnet.thread_pool.work_item.count ({work_item} / 5 sec),Rate,1390
+10/25/2026 10:10:15,System.Runtime,dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=gen1],Metric,832296
+10/25/2026 10:10:15,System.Runtime,dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=poh],Metric,115360
+10/25/2026 10:10:15,System.Runtime,dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=gen0],Metric,0
+10/25/2026 10:10:15,System.Runtime,dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=loh],Metric,3040440
+10/25/2026 10:10:15,System.Runtime,dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=gen2],Metric,482792
+10/25/2026 10:10:15,Npgsql,db.client.operation.npgsql.bytes_written (By / 5 sec)[db.client.connection.pool.name=Host=localhost;Port=5432;Database=plateback;Username=plateback],Rate,327402
+10/25/2026 10:10:15,System.Runtime,dotnet.process.cpu.count ({cpu}),Metric,12
+10/25/2026 10:10:15,Microsoft.AspNetCore.Hosting,http.server.active_requests ({request})[http.request.method=GET;url.scheme=http],Metric,15
+10/25/2026 10:10:15,System.Runtime,dotnet.process.cpu.time (s / 5 sec)[cpu.mode=system],Rate,1.7271340000000066
+10/25/2026 10:10:15,System.Runtime,dotnet.process.cpu.time (s / 5 sec)[cpu.mode=user],Rate,33.95152300000001
+10/25/2026 10:10:15,Microsoft.AspNetCore.Hosting,http.server.request.duration (s)[http.request.method=GET;http.response.status_code=200;http.route=/api/v1/listings/;network.protocol.version=1.1;url.scheme=http;Percentile=50],Metric,0.184814453125
+10/25/2026 10:10:15,Microsoft.AspNetCore.Hosting,http.server.request.duration (s)[http.request.method=GET;http.response.status_code=200;http.route=/api/v1/listings/;network.protocol.version=1.1;url.scheme=http;Percentile=95],Metric,0.33935546875
+10/25/2026 10:10:15,Microsoft.AspNetCore.Hosting,http.server.request.duration (s)[http.request.method=GET;http.response.status_code=200;http.route=/api/v1/listings/;network.protocol.version=1.1;url.scheme=http;Percentile=99],Metric,0.3916015625
+10/25/2026 10:10:15,System.Runtime,dotnet.thread_pool.queue.length ({work_item} / 5 sec),Rate,-5
+10/25/2026 10:10:15,System.Runtime,dotnet.monitor.lock_contentions ({contention} / 5 sec),Rate,17
+10/25/2026 10:10:15,Npgsql,db.client.connection.count ({connection})[db.client.connection.pool.name=Host=localhost;Port=5432;Database=plateback;Username=plateback;db.client.connection.state=idle],Metric,21
+10/25/2026 10:10:15,Npgsql,db.client.connection.count ({connection})[db.client.connection.pool.name=Host=localhost;Port=5432;Database=plateback;Username=plateback;db.client.connection.state=used],Metric,14
+10/25/2026 10:10:15,System.Runtime,dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=gen1],Metric,50113736
+10/25/2026 10:10:15,System.Runtime,dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=poh],Metric,589104
+10/25/2026 10:10:15,System.Runtime,dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=gen0],Metric,0
+10/25/2026 10:10:15,System.Runtime,dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=loh],Metric,13253128
+10/25/2026 10:10:15,System.Runtime,dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=gen2],Metric,299017368
+10/25/2026 10:10:15,Npgsql,db.client.operation.duration (s)[db.client.connection.pool.name=Host=localhost;Port=5432;Database=plateback;Username=plateback;db.system.name=postgresql;server.address=localhost;server.port=5432;Percentile=50],Metric,0.159423828125
+10/25/2026 10:10:15,Npgsql,db.client.operation.duration (s)[db.client.connection.pool.name=Host=localhost;Port=5432;Database=plateback;Username=plateback;db.system.name=postgresql;server.address=localhost;server.port=5432;Percentile=95],Metric,0.294921875
+10/25/2026 10:10:15,Npgsql,db.client.operation.duration (s)[db.client.connection.pool.name=Host=localhost;Port=5432;Database=plateback;Username=plateback;db.system.name=postgresql;server.address=localhost;server.port=5432;Percentile=99],Metric,0.3408203125
+10/25/2026 10:10:15,Npgsql,db.client.operation.npgsql.prepared_ratio[db.client.connection.pool.name=Host=localhost;Port=5432;Database=plateback;Username=plateback],Metric,0
+10/25/2026 10:10:15,Npgsql,db.client.operation.npgsql.bytes_read (By / 5 sec)[db.client.connection.pool.name=Host=localhost;Port=5432;Database=plateback;Username=plateback],Rate,1631888482
+10/25/2026 10:10:15,System.Runtime,dotnet.timer.count ({timer}),Metric,6
+10/25/2026 10:10:15,Npgsql,db.client.operation.npgsql.executing ({command})[db.client.connection.pool.name=Host=localhost;Port=5432;Database=plateback;Username=plateback],Metric,-4
+10/25/2026 10:10:15,System.Runtime,dotnet.gc.heap.total_allocated (By / 5 sec),Rate,5303385016
+10/25/2026 10:10:15,Npgsql,db.client.connection.max ({connection})[db.client.connection.pool.name=Host=localhost;Port=5432;Database=plateback;Username=plateback],Metric,100
+10/25/2026 10:10:15,System.Runtime,dotnet.gc.pause.time (s / 5 sec),Rate,2.671554999999998

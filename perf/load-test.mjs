@@ -12,6 +12,7 @@ import { writeFileSync, mkdirSync } from "node:fs";
 const BASE = process.env.API_URL ?? "http://localhost:5080";
 const DURATION = Number(process.env.DURATION ?? 15);
 const CONNECTIONS = Number(process.env.CONNECTIONS ?? 20);
+const WARMUP = Number(process.env.WARMUP ?? 3);
 const label = process.argv[2] ?? "run";
 
 async function login(email) {
@@ -47,12 +48,15 @@ const scenarios = [
 const only = process.env.ONLY;
 const rows = [];
 for (const s of scenarios.filter((x) => !only || x.name.includes(only))) {
-  const result = await autocannon({
+  const options = {
     url: BASE + s.path,
     connections: CONNECTIONS,
-    duration: DURATION,
     headers: s.token ? { Authorization: `Bearer ${s.token}` } : {},
-  });
+  };
+  // Unrecorded warm-up, so the first scenario does not pay for JIT compilation
+  // and connection pool start-up.
+  await autocannon({ ...options, duration: WARMUP });
+  const result = await autocannon({ ...options, duration: DURATION });
   const errors = result.errors + result.non2xx;
   rows.push({
     scenario: s.name,
@@ -69,7 +73,7 @@ mkdirSync("results", { recursive: true });
 const table = [
   `# Load test: ${label}`,
   "",
-  `${new Date().toISOString()}, ${CONNECTIONS} connections, ${DURATION} s per scenario, API at ${BASE}`,
+  `${new Date().toISOString()}, ${CONNECTIONS} connections, ${WARMUP} s warm-up then ${DURATION} s per scenario, API at ${BASE}`,
   "",
   "| Scenario | Requests/s | p50 (ms) | p99 (ms) | KB per response | Errors |",
   "| --- | ---: | ---: | ---: | ---: | ---: |",
