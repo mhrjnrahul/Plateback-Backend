@@ -1,0 +1,12 @@
+{
+  "name": "plateback-load-test",
+  "private": true,
+  "type": "module",
+  "description": "Load test for the PlateBack API (Week 5 profiling). See perf/README.md.",
+  "scripts": {
+    "load": "node load-test.mjs"
+  },
+  "devDependencies": {
+    "autocannon": "8.0.0"
+  }
+}
