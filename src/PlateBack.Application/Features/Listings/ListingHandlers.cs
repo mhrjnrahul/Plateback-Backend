@@ -169,14 +169,19 @@ public sealed class GetOrganizationListingsHandler(IAppDbContext db, ICurrentUse
             }
             query = query.Where(l => l.Status == parsed);
         }
+        // Upcoming and open listings first, soonest first; then past ones, newest
+        // first. Sorted and paged in SQL (Week 5: this loaded the business's
+        // whole history, 57 requests/s with two years of listings).
         var now = time.GetUtcNow();
-        var listings = await query.ToListAsync(cancellationToken);
-        return listings
+        var ordered = query
             .OrderBy(l => l.PickupEnd > now ? 0 : 1)
-            .ThenBy(l => l.PickupEnd > now ? l.PickupStart.UtcTicks : -l.PickupStart.UtcTicks)
-            .Select(l => ListingSummaryDto.From(l, organization))
-            .ToList()
-            .ToPage(PageRequest.From(page, pageSize));
+            .ThenBy(l => l.PickupEnd > now ? l.PickupStart : (DateTimeOffset?)null)
+            .ThenByDescending(l => l.PickupStart)
+            .ThenBy(l => l.Id);
+        var result = await ordered.ToPageAsync(PageRequest.From(page, pageSize), cancellationToken);
+        return new PageResult<ListingSummaryDto>(
+            result.Items.Select(l => ListingSummaryDto.From(l, organization)).ToList(),
+            result.Page, result.PageSize, result.Total);
     }
 }
 

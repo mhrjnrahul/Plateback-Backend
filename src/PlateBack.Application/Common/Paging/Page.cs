@@ -26,8 +26,4 @@ public static class PagingExtensions
         var items = await query.Skip(page.Skip).Take(page.PageSize).ToListAsync(cancellationToken);
         return new PageResult<T>(items, page.Page, page.PageSize, total);
     }
-
-    /// <summary>Pages a list that is already in memory.</summary>
-    public static PageResult<T> ToPage<T>(this IReadOnlyList<T> items, PageRequest page) =>
-        new(items.Skip(page.Skip).Take(page.PageSize).ToList(), page.Page, page.PageSize, items.Count);
 }

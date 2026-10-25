@@ -50,3 +50,18 @@ FROM rows;
 ANALYZE organizations;
 ANALYZE listings;
 SELECT count(*) AS listings, count(*) FILTER (WHERE status = 'Active') AS active FROM listings;
+
+-- Two years of history for Sunrise Bakery (the demo business): five listings a
+-- day, so the dashboard's listings table is measured at a realistic size.
+INSERT INTO listings (id, organization_id, title, category, description, allergen_notes, price, original_price,
+                      quantity_total, quantity_available, pickup_start, pickup_end, address, latitude, longitude,
+                      status, image_url, created_at)
+SELECT gen_random_uuid(), o.id, 'Past bread box #' || n, 'Bakery',
+       repeat('Bread and pastries from the day. ', 8), 'Contains gluten.', 150, 360, 10, 0,
+       now() - (n * interval '4.8 hours') - interval '1 day', now() - (n * interval '4.8 hours') - interval '22 hours',
+       o.address, o.latitude, o.longitude, 'Expired', NULL, now() - (n * interval '4.8 hours') - interval '1 day 3 hours'
+FROM organizations o CROSS JOIN generate_series(1, 3650) AS n
+WHERE o.name = 'Sunrise Bakery';
+
+ANALYZE listings;
+SELECT count(*) AS sunrise_listings FROM listings l JOIN organizations o ON o.id = l.organization_id WHERE o.name = 'Sunrise Bakery';

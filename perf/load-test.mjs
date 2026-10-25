@@ -44,8 +44,9 @@ const scenarios = [
   { name: "Business listings table", path: `/api/v1/organizations/${orgId}/listings?pageSize=50`, token: arjun },
 ];
 
+const only = process.env.ONLY;
 const rows = [];
-for (const s of scenarios) {
+for (const s of scenarios.filter((x) => !only || x.name.includes(only))) {
   const result = await autocannon({
     url: BASE + s.path,
     connections: CONNECTIONS,
