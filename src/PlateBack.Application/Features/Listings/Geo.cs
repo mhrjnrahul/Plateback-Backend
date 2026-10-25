@@ -3,7 +3,7 @@ namespace PlateBack.Application.Features.Listings;
 /// <summary>Distance helpers for radius search (design doc 4.5).</summary>
 public static class Geo
 {
-    private const double EarthRadiusKm = 6371;
+    public const double EarthRadiusKm = 6371;
     private const double KmPerDegreeLatitude = 111.32;
 
     /// <summary>Great-circle distance in kilometres (Haversine formula).</summary>
@@ -18,9 +18,8 @@ public static class Geo
     }
 
     /// <summary>
-    /// A latitude/longitude box that contains the circle. Used as a cheap
-    /// prefilter in SQL (it can use an index); the exact distance is then
-    /// computed for the few rows inside the box.
+    /// A latitude/longitude box that contains the circle: a cheap first filter
+    /// before the exact distance is computed for the rows inside it.
     /// </summary>
     public static (double MinLat, double MaxLat, double MinLng, double MaxLng) BoundingBox(double lat, double lng, double radiusKm)
     {

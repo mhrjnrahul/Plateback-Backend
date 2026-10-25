@@ -65,40 +65,76 @@ public sealed class SearchListingsHandler(IAppDbContext db, IOptions<BusinessRul
 
         if (!hasLocation)
         {
-            // Sold-out listings go last, then the chosen order; all in SQL.
+            // Sold-out listings go last, then the chosen order.
             var ordered = rows.OrderBy(r => r.Listing.Status == ListingStatus.SoldOut ? 1 : 0);
             ordered = sort == "price"
                 ? ordered.ThenBy(r => r.Listing.Price).ThenBy(r => r.Listing.PickupEnd)
                 : ordered.ThenBy(r => r.Listing.PickupEnd);
-            var result = await ordered.ThenBy(r => r.Listing.Id).ToPageAsync(page, cancellationToken);
-            return new PageResult<ListingSummaryDto>(
-                result.Items.Select(r => ListingSummaryDto.From(r.Listing, r.Organization)).ToList(),
-                result.Page, result.PageSize, result.Total);
+            return await PageAsync(
+                rows.Select(r => r.Listing.Id),
+                ordered.ThenBy(r => r.Listing.Id).Select(r => new Hit(r.Listing.Id, null)),
+                page, cancellationToken);
         }
 
         var lat = query.Lat!.Value;
         var lng = query.Lng!.Value;
         var radius = Math.Min(query.RadiusKm ?? rules.Value.SearchRadiusDefaultKm, rules.Value.SearchRadiusMaxKm);
         var box = Geo.BoundingBox(lat, lng, radius);
-        var candidates = await rows
+
+        // Geo.DistanceKm, written so EF Core can translate it to SQL: the
+        // distance is computed, filtered and sorted on in PostgreSQL.
+        const double Radians = Math.PI / 180;
+        var cosLat = Math.Cos(lat * Radians);
+        var located = rows
             .Where(r => r.Listing.Latitude >= box.MinLat && r.Listing.Latitude <= box.MaxLat
                 && r.Listing.Longitude >= box.MinLng && r.Listing.Longitude <= box.MaxLng)
-            .ToListAsync(cancellationToken);
+            .Select(r => new
+            {
+                r.Listing,
+                Distance = 2 * Geo.EarthRadiusKm * Math.Asin(Math.Sqrt(
+                    Math.Pow(Math.Sin((r.Listing.Latitude - lat) * Radians / 2), 2)
+                    + cosLat * Math.Cos(r.Listing.Latitude * Radians)
+                        * Math.Pow(Math.Sin((r.Listing.Longitude - lng) * Radians / 2), 2))),
+            })
+            .Where(r => r.Distance <= radius);
 
-        var withDistance = candidates
-            .Select(r => (r.Listing, r.Organization, Distance: Geo.DistanceKm(lat, lng, r.Listing.Latitude, r.Listing.Longitude)))
-            .Where(r => r.Distance <= radius)
-            .OrderBy(r => r.Listing.Status == ListingStatus.SoldOut ? 1 : 0);
+        var byStatus = located.OrderBy(r => r.Listing.Status == ListingStatus.SoldOut ? 1 : 0);
         var sorted = sort switch
         {
-            "price" => withDistance.ThenBy(r => r.Listing.Price).ThenBy(r => r.Distance),
-            "pickup" => withDistance.ThenBy(r => r.Listing.PickupEnd).ThenBy(r => r.Distance),
-            _ => withDistance.ThenBy(r => r.Distance).ThenBy(r => r.Listing.PickupEnd),
+            "price" => byStatus.ThenBy(r => r.Listing.Price).ThenBy(r => r.Distance),
+            "pickup" => byStatus.ThenBy(r => r.Listing.PickupEnd).ThenBy(r => r.Distance),
+            _ => byStatus.ThenBy(r => r.Distance).ThenBy(r => r.Listing.PickupEnd),
         };
-        return sorted
-            .Select(r => ListingSummaryDto.From(r.Listing, r.Organization, r.Distance))
-            .ToList()
-            .ToPage(page);
+        return await PageAsync(
+            located.Select(r => r.Listing.Id),
+            sorted.ThenBy(r => r.Listing.Id).Select(r => new Hit(r.Listing.Id, r.Distance)),
+            page, cancellationToken);
+    }
+
+    private sealed record Hit(Guid Id, double? Distance);
+
+    /// <summary>
+    /// Counts the matches and picks the page using only columns in the
+    /// ix_listings_live covering index, so PostgreSQL never reads the table
+    /// for the rows it skips. Only the page's listings are then loaded in full.
+    /// (Week 5: before, every listing in the search area was loaded, about
+    /// 6,000 rows at 25 km, to return 20.)
+    /// </summary>
+    private async Task<PageResult<ListingSummaryDto>> PageAsync(
+        IQueryable<Guid> matches, IQueryable<Hit> ordered, PageRequest page, CancellationToken cancellationToken)
+    {
+        var total = await matches.CountAsync(cancellationToken);
+        var hits = await ordered.Skip(page.Skip).Take(page.PageSize).ToListAsync(cancellationToken);
+        var ids = hits.Select(h => h.Id).ToList();
+        var loaded = await (
+            from l in db.Listings.AsNoTracking()
+            join o in db.Organizations.AsNoTracking() on l.OrganizationId equals o.Id
+            where ids.Contains(l.Id)
+            select new { Listing = l, Organization = o }).ToDictionaryAsync(r => r.Listing.Id, cancellationToken);
+        var items = hits
+            .Select(h => ListingSummaryDto.From(loaded[h.Id].Listing, loaded[h.Id].Organization, h.Distance))
+            .ToList();
+        return new PageResult<ListingSummaryDto>(items, page.Page, page.PageSize, total);
     }
 }
 

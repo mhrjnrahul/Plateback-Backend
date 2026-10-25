@@ -35,7 +35,14 @@ internal sealed class ListingConfiguration : IEntityTypeConfiguration<Listing>
 
         builder.HasIndex(l => new { l.Status, l.PickupEnd });
         builder.HasIndex(l => new { l.OrganizationId, l.Status });
-        builder.HasIndex(l => new { l.Latitude, l.Longitude }).HasFilter("status = 'Active'");
+        // Search (Week 5): covers every column the listing search filters, sorts
+        // and counts on, for live listings only, so the count and the page are
+        // index-only scans. It replaced a (latitude, longitude) index on Active
+        // rows that the planner never used (0 scans under load).
+        builder.HasIndex(l => l.PickupEnd)
+            .HasDatabaseName("ix_listings_live")
+            .HasFilter("status IN ('Active', 'SoldOut')")
+            .IncludeProperties(l => new { l.Status, l.Latitude, l.Longitude, l.OrganizationId, l.Id, l.Price, l.Category, l.Title });
         builder.HasOne<Organization>().WithMany().HasForeignKey(l => l.OrganizationId).OnDelete(DeleteBehavior.Restrict);
     }
 }

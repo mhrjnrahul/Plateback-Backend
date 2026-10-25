@@ -255,9 +255,11 @@ namespace PlateBack.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_listings");
 
-                    b.HasIndex("Latitude", "Longitude")
-                        .HasDatabaseName("ix_listings_latitude_longitude")
-                        .HasFilter("status = 'Active'");
+                    b.HasIndex("PickupEnd")
+                        .HasDatabaseName("ix_listings_live")
+                        .HasFilter("status IN ('Active', 'SoldOut')");
+
+                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("PickupEnd"), new[] { "Status", "Latitude", "Longitude", "OrganizationId", "Id", "Price", "Category", "Title" });
 
                     b.HasIndex("OrganizationId", "Status")
                         .HasDatabaseName("ix_listings_organization_id_status");
