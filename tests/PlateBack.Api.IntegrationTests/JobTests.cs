@@ -1,7 +1,12 @@
 using System.Net;
 using System.Net.Http.Json;
 
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+
 using PlateBack.Api.IntegrationTests.Infrastructure;
+using PlateBack.Application.Common.Abstractions;
+using PlateBack.Domain.Entities;
 
 namespace PlateBack.Api.IntegrationTests;
 
@@ -50,4 +55,33 @@ public class JobTests(PlateBackFactory factory) : ApiTestBase(factory)
         (await maya.PostAsync("/api/v1/notifications/read-all", null, Ct)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
         (await ReadAsync<NotificationPageBody>(await maya.GetAsync("/api/v1/notifications", Ct))).UnreadCount.ShouldBe(0);
     }
+
+    [Fact]
+    public async Task A_broken_outbox_message_is_retried_five_times_without_blocking_the_others()
+    {
+        // A message the job cannot read, written next to a good one.
+        await using (var scope = Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<IAppDbContext>();
+            db.OutboxMessages.Add(OutboxMessage.Create("Unknown", "{}", Clock.GetUtcNow()));
+            await db.SaveChangesAsync(Ct);
+        }
+        var maya = await MayaAsync();
+        (await maya.PostAsJsonAsync($"/api/v1/listings/{Id("listing-thali")}/reservations", new { quantity = 1 }, Ct))
+            .StatusCode.ShouldBe(HttpStatusCode.Created);
+
+        (await Factory.RunOutboxAsync()).ShouldBe(2); // the good messages still go out
+        for (var i = 0; i < 6; i++)
+        {
+            await Factory.RunOutboxAsync();
+        }
+
+        await using var check = Factory.Services.CreateAsyncScope();
+        var broken = await check.ServiceProvider.GetRequiredService<IAppDbContext>().OutboxMessages
+            .AsNoTracking().SingleAsync(m => m.Type == "Unknown", Ct);
+        broken.Attempts.ShouldBe(OutboxMessage.MaxAttempts); // not retried forever
+        broken.ProcessedAt.ShouldNotBeNull();
+        broken.LastError.ShouldNotBeNull().ShouldContain("Unknown outbox message type");
+    }
 }
+
