@@ -82,3 +82,12 @@ One entry per decision: the problem, the options considered, the choice and what
 - **Options:** Drop reuse detection. Let the frontend send one refresh at a time and change nothing on the server. Accept a just-rotated token for a short time.
 - **Choice:** Both of the last two. The frontend shares one refresh request. The API accepts a token rotated less than 30 seconds ago and answers with an access token only, leaving the browser's newer cookie alone. Reuse after that still revokes every session.
 - **Trade-off:** A stolen token replayed within 30 seconds of its rotation gets one 15-minute access token, not a session. Two tabs, double mounts and reloads no longer sign people out.
+
+### 11. Search pages in PostgreSQL through a covering index (Week 5)
+
+- **Problem:** With 30,000 listings, the 25 km search answered 49 requests/s. Runtime counters showed 21.6 MB allocated per request and 2.7 s of every 5 s in garbage collection: it loaded all 6,021 listings in the area, with every column, to compute distances in C# and return 20.
+- **Options:** Cache search results (stale stock is the one thing customers must not see). PostGIS with a spatial index (a new extension for a problem the data does not have: the whole valley fits in one bounding box). Compute the distance in SQL and page there, with an index that serves the query.
+- **Choice:** The Haversine distance written in LINQ so EF Core translates it, filtering, sorting, counting and paging in SQL, and a partial index of live listings (`status IN ('Active', 'SoldOut')`) on `pickup_end` that includes every column search filters, sorts and counts on. The count and the page read only the index; the page's 20 listings are then loaded by id. It replaced `ix_listings_latitude_longitude`, which `pg_stat_user_indexes` showed had never been used.
+- **Example:** `EXPLAIN ANALYZE` of the 5 km page query: a bitmap heap scan over 1,831 table pages taking 15 ms before, an index-only scan with 0 heap fetches taking 6 ms after. Under load, 220 to 601 requests/s at 5 km and 54 to 342 at 25 km.
+- **Trade-off:** The index must list the columns search uses; a new filter on another column needs the index updated, or it reads the table again (which is how the first version slowed text search from 480 to 306 requests/s until the title was added).
+

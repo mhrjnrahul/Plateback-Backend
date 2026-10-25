@@ -7,11 +7,13 @@ PlateBack lets bakeries, cafes and restaurants list end-of-day surplus food, and
 - **Running the whole app (frontend and backend together):** see the [frontend repository's README](https://github.com/mhrjnrahul/PlateBack---Frontend#readme).
 - **Week 3 submission:** the ZIP of this repository is attached to the [week3 release](https://github.com/mhrjnrahul/Plateback-Backend/releases/tag/week3).
 - **Week 4 submission:** one ZIP with both projects is attached to the frontend's [week4 release](https://github.com/mhrjnrahul/PlateBack---Frontend/releases/tag/week4). What changed here is listed under [Week 4 changes](#week-4-changes).
+- **Week 5 submission (testing, debugging, optimisation):** one ZIP with both projects, test reports and error logs is attached to the frontend's [week5 release](https://github.com/mhrjnrahul/PlateBack---Frontend/releases/tag/week5). The strategy, coverage, profiling and debugging reports are in the frontend repository's [docs/testing.md](https://github.com/mhrjnrahul/PlateBack---Frontend/blob/main/docs/testing.md) and [docs/debugging.md](https://github.com/mhrjnrahul/PlateBack---Frontend/blob/main/docs/debugging.md); what changed here is under [Week 5 changes](#week-5-changes).
 
 ## Contents
 
 - [Week 3 brief checklist](#week-3-brief-checklist)
 - [Week 4 changes](#week-4-changes)
+- [Week 5 changes](#week-5-changes)
 - [Run it locally](#run-it-locally)
 - [Configuration](#configuration)
 - [What the API does](#what-the-api-does)
@@ -34,7 +36,7 @@ PlateBack lets bakeries, cafes and restaurants list end-of-day surplus food, and
 | Secure authentication | ASP.NET Core Identity, 15-minute JWTs, rotating refresh tokens in httpOnly cookies, lockout and rate limiting ([Security](#security)) |
 | Error handling | Every error is RFC 9457 ProblemDetails with a stable `code` ([Error handling](#error-handling-and-validation)) |
 | Data validation | FluentValidation on every request body and query, and domain rules in the entities |
-| Tests | 163 tests: 52 domain, 24 application, 87 integration tests against real PostgreSQL ([Testing](#testing)) |
+| Tests | 181 tests: 55 domain, 24 application, 102 integration tests against real PostgreSQL ([Testing](#testing)) |
 | API documentation: endpoints, methods, parameters and responses | [docs/API.md](docs/API.md), [docs/openapi.json](docs/openapi.json) and the `/scalar` page |
 | A README with setup and execution instructions | This file ([Run it locally](#run-it-locally)) |
 | About 30 to 35 hours | About 30 to 35 hours ([Development process](#development-process)) |
@@ -50,6 +52,18 @@ Connecting the frontend showed problems that tests against the API alone could n
 | **Cancelled requests answer 499** | React cancels requests it no longer needs; the API logged each one as a 500, and the impact-stats cache passed the cancellation on to other waiting requests. |
 | **30-second grace window for rotated refresh tokens** (decision 10) | Two refreshes with the same cookie (React's double mount, two tabs, a reload mid-refresh) looked like a stolen token and signed people out. |
 | **Upload URLs are site-relative** (`/uploads/...`) | Absolute URLs stored the API's own host (`localhost:5080`) in listings, which breaks behind a proxy or on another host. |
+
+## Week 5 changes
+
+Profiled with 30,000 listings (`perf/load-data.sql`), a load test, runtime counters, CPU traces and `EXPLAIN`; see [perf/README.md](perf/README.md) and decision 11.
+
+| Change | Measured effect (Week 4 code to Week 5 code, same data) |
+| --- | --- |
+| **Listing search distance, sort, count and paging run in SQL**, and only the page's listings are loaded | 25 km search 54 to 342 requests/s (p99 685 to 87 ms); 21.6 to 0.37 MB allocated per request |
+| **Covering index of live listings** (`ix_listings_live`), replacing a location index with 0 recorded scans | Count and page become index-only scans; 5 km search 220 to 601 requests/s |
+| **A business's listings table pages in SQL** | 87 to 785 requests/s with two years of history (3,650 listings) |
+| **18 new tests** for what the coverage report showed untested | Lines 84.1 to 88.0%, methods 90.1 to 95.6%; see [Testing](#testing) |
+| **CI** (`.github/workflows/tests.yml`) | Build, style check and all tests against PostgreSQL 16 on every push, with coverage |
 
 ## Run it locally
 
@@ -137,7 +151,8 @@ The businesses are in Kathmandu, Lalitpur and Bhaktapur. Search around Thamel wi
 | Command | What it does |
 | --- | --- |
 | `dotnet build` | Builds everything; warnings fail the build |
-| `dotnet test` | Runs all 163 tests (PostgreSQL must be running) |
+| `dotnet test` | Runs all 181 tests (PostgreSQL must be running) |
+| `dotnet test -- --coverage --coverage-output-format cobertura --coverage-output coverage.cobertura.xml` | The same with code coverage; `dotnet tool restore` then `dotnet tool run reportgenerator` turns it into HTML (see `.github/workflows/tests.yml`) |
 | `dotnet run --project src/PlateBack.Api` | Runs the API on http://localhost:5080 |
 | `dotnet run --project src/PlateBack.Api -- seed` | Migrates the database and resets the demo data |
 | `dotnet format --verify-no-changes` | Checks the code style from `.editorconfig` |
@@ -248,7 +263,7 @@ PostgreSQL is the source of truth, and the rules that must never break are enfor
 - a pickup window that ends after it starts;
 - a unique pickup code;
 - a partial unique index allowing one active reservation per customer per listing;
-- a partial index for the location search;
+- a covering partial index of live listings for search (Week 5, decision 11);
 - an index for polling the outbox;
 - row versions (`xmin`) on listings and reservations.
 
@@ -300,11 +315,11 @@ Every error is RFC 9457 ProblemDetails (`application/problem+json`) with a stabl
 dotnet test
 ```
 
-**163 tests, all passing:**
+**181 tests, all passing** (line coverage 88%, methods 95.6%):
 
-- **Domain (52):** the state rules of every entity. Examples: a collected reservation cannot be cancelled; the pickup window must be 15 to 720 minutes (14 and 721 fail); reliability stays between 0 and 100; a no-show is applied once.
+- **Domain (55):** the state rules of every entity. Examples: a collected reservation cannot be cancelled; the pickup window must be 15 to 720 minutes (14 and 721 fail); reliability stays between 0 and 100; a no-show is applied once.
 - **Application (24):** validators, the distance formula, file-type detection and paging defaults.
-- **Integration (87):** the real API hosted in memory with `WebApplicationFactory`, called over HTTP like the frontend would, against a real PostgreSQL database. Highlights:
+- **Integration (102):** the real API hosted in memory with `WebApplicationFactory`, called over HTTP like the frontend would, against a real PostgreSQL database. Highlights:
   - Ten customers race for the last portion: exactly one gets it, nine get `SOLD_OUT`, stock ends at 0.
   - One customer double-clicking Reserve five times gets one reservation.
   - Two parallel cancels return the stock once.
@@ -316,6 +331,9 @@ dotnet test
   - Two refreshes with the same cookie within 30 seconds keep the session (Week 4).
   - SignalR: a visitor hears about stock changes, only a business's own staff hear about its queue, a customer cannot join a business's group, and notifications are pushed once the outbox delivers them (Week 4).
   - A storage failure (a full disk) gives one Error log entry carrying the trace id the client sees; expected 4xx answers give none (Week 4).
+  - Week 5, from the coverage report: the dashboard listings order and paging, owners (not staff) editing business details, admin listing removal notifying customers and staff, finding, suspending and restoring accounts (a suspended user's live token cannot reserve), marking notifications read, and a broken outbox message retried five times without blocking the others.
+
+Every test is listed with its purpose in the frontend repository's [test catalogue](https://github.com/mhrjnrahul/PlateBack---Frontend/blob/main/docs/test-catalogue.md). GitHub Actions runs the same suite against PostgreSQL 16 on every push.
 
 The integration tests use the database `plateback_test` on localhost with the `plateback` login (override with the `PLATEBACK_TEST_DB` environment variable). It is created on the first run. Before each test, all tables are emptied and the demo data loaded again. A test clock fixes "now" so the dashboard's "today" is always the same day.
 
