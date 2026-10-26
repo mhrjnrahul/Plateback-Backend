@@ -46,11 +46,15 @@ jobs:
           --report-xunit-trx --report-xunit-html
           --coverage --coverage-output-format cobertura --coverage-output coverage.cobertura.xml
 
+      - name: Show where the test results went
+        if: always()
+        run: find . -path ./.git -prune -o -name '*.trx' -print -o -name 'coverage.cobertura.xml' -print
+
       - name: Coverage report
         if: always()
         run: >-
           dotnet tool run reportgenerator
-          -reports:"tests/*/bin/Debug/net10.0/TestResults/coverage.cobertura.xml"
+          -reports:"**/TestResults/**/coverage.cobertura.xml"
           -targetdir:coverage -reporttypes:"Html;TextSummary;MarkdownSummaryGithub"
           -assemblyfilters:"+PlateBack.*;-PlateBack.*.Tests;-PlateBack.Api.IntegrationTests"
           -classfilters:"-PlateBack.Infrastructure.Persistence.Migrations.*"
@@ -61,5 +65,5 @@ jobs:
         with:
           name: test-results
           path: |
-            tests/*/bin/Debug/net10.0/TestResults/
+            **/TestResults/**
             coverage/
