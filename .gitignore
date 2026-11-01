@@ -483,9 +483,9 @@ $RECYCLE.BIN/
 
 # ---------- PlateBack ----------
 # Secrets: connection strings and the JWT key live in `dotnet user-secrets`
-# (outside the repository) or environment variables, never in these files.
+# (outside the repository) or App Service's App settings, never in files.
+# appsettings.Production.json is committed: it holds no secrets, only switches.
 appsettings.*.local.json
-appsettings.Production.json
 *.pfx
 *.pem
 *.key

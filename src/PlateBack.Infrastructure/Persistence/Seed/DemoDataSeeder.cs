@@ -15,7 +15,7 @@ namespace PlateBack.Infrastructure.Persistence.Seed;
 /// windows are relative to now, so the data never goes stale. Every account
 /// uses the password "password123".
 /// </summary>
-public sealed class DemoDataSeeder(AppDbContext db, IOptions<BusinessRules> rules, TimeProvider time)
+public sealed class DemoDataSeeder(AppDbContext db, IOptions<BusinessRules> rules, IOptions<DemoOptions> demo, TimeProvider time)
 {
     public const string Password = "password123";
 
@@ -26,12 +26,30 @@ public sealed class DemoDataSeeder(AppDbContext db, IOptions<BusinessRules> rule
                  identity_user_claims, identity_users CASCADE
         """;
 
-    /// <summary>Deletes all data and inserts the demo data again.</summary>
+    /// <summary>
+    /// Deletes all data and inserts the demo data again. Development and tests
+    /// only (`dotnet run -- seed`): never wired to start-up.
+    /// </summary>
     public async Task ResetAsync(CancellationToken cancellationToken = default)
     {
         await db.Database.ExecuteSqlRawAsync(TruncateAll, cancellationToken);
         db.ChangeTracker.Clear();
         await SeedAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Inserts the demo data only when there are no accounts yet, so the first
+    /// start of a new deployment gets it and every later start keeps real data.
+    /// </summary>
+    /// <returns>Whether the demo data was inserted.</returns>
+    public async Task<bool> SeedIfEmptyAsync(CancellationToken cancellationToken = default)
+    {
+        if (await db.IdentityUsers.AnyAsync(cancellationToken) || await db.Users.AnyAsync(cancellationToken))
+        {
+            return false;
+        }
+        await SeedAsync(cancellationToken);
+        return true;
     }
 
     private async Task SeedAsync(CancellationToken cancellationToken)
@@ -45,6 +63,11 @@ public sealed class DemoDataSeeder(AppDbContext db, IOptions<BusinessRules> rule
         // still checks it the normal way at login.
         var hasher = new PasswordHasher<ApplicationUser>();
         var sharedHash = hasher.HashPassword(new ApplicationUser(), Password);
+        // A public deployment must not have an admin with a published password:
+        // when Demo:AdminPassword is set, the admin gets that one instead.
+        var adminHash = string.IsNullOrEmpty(demo.Value.AdminPassword)
+            ? sharedHash
+            : hasher.HashPassword(new ApplicationUser(), demo.Value.AdminPassword);
         var users = new Dictionary<string, User>();
         void AddUser(string key, string name, string email, int reliability, UserRole role = UserRole.Customer)
         {
@@ -57,7 +80,7 @@ public sealed class DemoDataSeeder(AppDbContext db, IOptions<BusinessRules> rule
                 Email = email,
                 NormalizedEmail = email.ToUpperInvariant(),
                 EmailConfirmed = true,
-                PasswordHash = sharedHash,
+                PasswordHash = role == UserRole.Admin ? adminHash : sharedHash,
                 SecurityStamp = Guid.NewGuid().ToString("N"),
                 ConcurrencyStamp = Guid.NewGuid().ToString(),
                 LockoutEnabled = true,

@@ -43,9 +43,21 @@ public static class DependencyInjection
         services.AddScoped<IIdentityService, IdentityService>();
         services.AddSingleton<ITokenService, TokenService>();
         services.AddScoped<DemoDataSeeder>();
+        services.AddOptions<DemoOptions>().Bind(configuration.GetSection(DemoOptions.Section));
+        services.AddOptions<DatabaseOptions>().Bind(configuration.GetSection(DatabaseOptions.Section));
 
         services.AddOptions<UploadOptions>().Bind(configuration.GetSection(UploadOptions.Section));
-        services.AddSingleton<IImageStorage, LocalImageStorage>();
+        services.AddOptions<StorageOptions>().Bind(configuration.GetSection(StorageOptions.Section));
+        // Local disk in development; Azure Blob Storage when deployed (Storage:Provider = Blob).
+        if (configuration.GetSection(StorageOptions.Section).Get<StorageOptions>()?.UsesBlob == true)
+        {
+            services.AddSingleton<BlobImageStorage>();
+            services.AddSingleton<IImageStorage>(sp => sp.GetRequiredService<BlobImageStorage>());
+        }
+        else
+        {
+            services.AddSingleton<IImageStorage, LocalImageStorage>();
+        }
 
         services.AddOptions<JobOptions>().Bind(configuration.GetSection(JobOptions.Section));
         services.AddHostedService<BackgroundJobs>();

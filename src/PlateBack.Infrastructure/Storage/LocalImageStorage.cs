@@ -18,8 +18,9 @@ public sealed class UploadOptions
 }
 
 /// <summary>
-/// Saves photos to a local folder that the API serves as static files. Fine
-/// for one server; Week 6 can swap in cloud storage behind the same interface.
+/// Saves photos to a local folder that the API serves as static files. For
+/// development: a deployed App Service uses <see cref="BlobImageStorage"/>,
+/// because its disk is not where data should live.
 /// </summary>
 public sealed class LocalImageStorage(IOptions<UploadOptions> options, IHostEnvironment environment) : IImageStorage
 {

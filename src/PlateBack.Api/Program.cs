@@ -1,6 +1,8 @@
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 
+using Azure.Monitor.OpenTelemetry.AspNetCore;
+
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.SignalR;
@@ -28,16 +30,40 @@ using Scalar.AspNetCore;
 
 using Serilog;
 using Serilog.Events;
+using Serilog.Formatting.Compact;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // ---------- Logging ----------
-builder.Services.AddSerilog((services, logger) => logger
-    .ReadFrom.Configuration(builder.Configuration)
-    .ReadFrom.Services(services)
-    .Enrich.FromLogContext()
-    .WriteTo.Console(outputTemplate:
-        "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {CorrelationId}{NewLine}{Exception}"));
+// Serilog is the only logger. Deployed, each event is one JSON line (App
+// Service's log stream and log search can filter on level and CorrelationId),
+// and it is also handed to Application Insights when that is configured.
+builder.Logging.ClearProviders();
+builder.Services.AddSerilog((services, logger) =>
+{
+    logger
+        .ReadFrom.Configuration(builder.Configuration)
+        .ReadFrom.Services(services)
+        .Enrich.FromLogContext();
+    if (builder.Environment.IsProduction())
+    {
+        logger.WriteTo.Console(new RenderedCompactJsonFormatter());
+    }
+    else
+    {
+        logger.WriteTo.Console(outputTemplate:
+            "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {CorrelationId}{NewLine}{Exception}");
+    }
+}, writeToProviders: true);
+
+// ---------- Monitoring: Application Insights (Week 6) ----------
+// On when App Service has APPLICATIONINSIGHTS_CONNECTION_STRING: requests,
+// SQL and Blob Storage calls, exceptions and the logs above, all linked by the
+// request's trace id.
+if (!string.IsNullOrEmpty(builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]))
+{
+    builder.Services.AddOpenTelemetry().UseAzureMonitor();
+}
 
 // ---------- Settings (checked at startup, so a missing secret fails fast) ----------
 builder.Services.AddOptions<JwtOptions>()
@@ -184,6 +210,36 @@ if (args.Contains("seed"))
     return;
 }
 
+// Deployed (Database:MigrateOnStartup, Database:SeedDemoIfEmpty): bring the
+// schema up to date before serving requests, and give a brand-new database the
+// demo data. Unlike `seed`, this never deletes anything, so restarts and
+// redeploys keep every account and reservation.
+var database = app.Services.GetRequiredService<IOptions<DatabaseOptions>>().Value;
+if (database.MigrateOnStartup || database.SeedDemoIfEmpty)
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    if (database.MigrateOnStartup)
+    {
+        await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+        Log.Information("Database migrations applied");
+    }
+    if (database.SeedDemoIfEmpty)
+    {
+        var demo = scope.ServiceProvider.GetRequiredService<IOptions<DemoOptions>>().Value;
+        if (!app.Environment.IsDevelopment() && !app.Environment.IsEnvironment("Testing")
+            && string.IsNullOrEmpty(demo.AdminPassword))
+        {
+            throw new InvalidOperationException(
+                "Demo:AdminPassword must be set when demo data is seeded on a deployed site; " +
+                "otherwise the demo admin keeps the published password.");
+        }
+        if (await scope.ServiceProvider.GetRequiredService<DemoDataSeeder>().SeedIfEmptyAsync())
+        {
+            Log.Information("Demo data inserted into the empty database");
+        }
+    }
+}
+
 // First, so everything after it (request log, HTTPS redirection, rate
 // limiter) sees the visitor's IP and https, not the front end's.
 if (trustForwardedHeaders)
@@ -233,15 +289,61 @@ if (!app.Environment.IsDevelopment() && !app.Environment.IsEnvironment("Testing"
     app.UseHttpsRedirection();
 }
 
+// ---------- Listing photos ----------
 var uploads = app.Services.GetRequiredService<IOptions<UploadOptions>>().Value;
-var uploadFolder = LocalImageStorage.FolderPath(uploads, app.Environment);
-Directory.CreateDirectory(uploadFolder);
-app.UseStaticFiles(new StaticFileOptions
+var storage = app.Services.GetRequiredService<IOptions<StorageOptions>>().Value;
+if (!storage.UsesBlob)
 {
-    FileProvider = new PhysicalFileProvider(uploadFolder),
-    RequestPath = uploads.RequestPath,
-    ServeUnknownFileTypes = false,
-});
+    var uploadFolder = LocalImageStorage.FolderPath(uploads, app.Environment);
+    Directory.CreateDirectory(uploadFolder);
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new PhysicalFileProvider(uploadFolder),
+        RequestPath = uploads.RequestPath,
+        ServeUnknownFileTypes = false,
+    });
+}
+
+// ---------- The React app (Week 6) ----------
+// The deploy workflow puts the frontend's build into wwwroot, so the browser
+// gets the app, the API and the SignalR hub from one address, as with the
+// Week 4 dev proxy: no CORS, and the refresh cookie stays SameSite=Strict.
+// Without a wwwroot (development, tests) none of this is active.
+var hasFrontend = app.Environment.WebRootFileProvider.GetFileInfo("index.html").Exists;
+var contentSecurityPolicy = string.Join("; ",
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'", // React style attributes (stock bars, chart)
+    "img-src 'self' data: blob:", // data: and blob: for the photo preview before upload
+    "font-src 'self'",
+    $"connect-src 'self' {builder.Configuration["ContentSecurityPolicy:ConnectSources"]}".TrimEnd(),
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'");
+var frontendFiles = new StaticFileOptions
+{
+    OnPrepareResponse = context =>
+    {
+        var headers = context.Context.Response.Headers;
+        if (context.Context.Request.Path.StartsWithSegments("/assets"))
+        {
+            // Vite puts a content hash in these names: a new release means new names.
+            headers.CacheControl = "public, max-age=31536000, immutable";
+        }
+        else
+        {
+            // index.html and friends: always ask, so a new release is picked up at once.
+            headers.CacheControl = "no-cache";
+            headers.ContentSecurityPolicy = contentSecurityPolicy;
+        }
+    },
+};
+if (hasFrontend)
+{
+    app.UseDefaultFiles();
+    app.UseStaticFiles(frontendFiles);
+}
 
 app.UseCors();
 app.UseAuthentication();
@@ -268,6 +370,32 @@ api.MapNotificationEndpoints();
 api.MapAdminEndpoints();
 api.MapUploadEndpoints();
 app.MapHub<LiveHub>(LiveHub.Path);
+
+if (storage.UsesBlob)
+{
+    // Photos stream from the private container under the same /uploads address.
+    app.MapGet($"{uploads.RequestPath.TrimEnd('/')}/{{fileName}}",
+            async (string fileName, BlobImageStorage photos, HttpResponse response, CancellationToken ct) =>
+            {
+                var image = await photos.OpenAsync(fileName, ct);
+                if (image is null)
+                {
+                    return Results.NotFound();
+                }
+                response.Headers.CacheControl = "public, max-age=31536000, immutable"; // names are random and never reused
+                return Results.Stream(image.Content, image.ContentType);
+            })
+        .ExcludeFromDescription();
+}
+
+if (hasFrontend)
+{
+    // Any other path without a file extension is a page of the React app
+    // (/browse, /me/reservations...), so a refresh or a shared link works.
+    // Files (nonfile) are left to the static file middleware, and API, hub,
+    // health and docs paths keep their ProblemDetails 404.
+    app.MapFallbackToFile("{*path:nonfile:regex(^(?!api/|hubs/|health$|openapi/|scalar).*$)}", "index.html", frontendFiles);
+}
 
 app.Run();
 
