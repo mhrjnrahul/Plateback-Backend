@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
@@ -153,6 +154,24 @@ builder.Services.AddRateLimiter(o =>
     };
 });
 
+// ---------- Behind a proxy (Azure App Service) ----------
+// App Service's front end receives the HTTPS request and passes it on over
+// HTTP, adding X-Forwarded-For (the visitor's IP) and X-Forwarded-Proto
+// (https). Only trusted where the app cannot be reached any other way
+// (ForwardedHeaders:Enabled, on in production): anywhere else a visitor
+// could send these headers themselves.
+var trustForwardedHeaders = builder.Configuration.GetValue("ForwardedHeaders:Enabled", false);
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    // The front end's addresses are not published, so no allow-list; instead
+    // only the last entry is used, the one the front end itself appended.
+    // An address a visitor puts in the header is to the left of it and ignored.
+    options.ForwardLimit = 1;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 var app = builder.Build();
 
 // `dotnet run -- seed`: apply migrations and reset the demo data, then exit.
@@ -163,6 +182,13 @@ if (args.Contains("seed"))
     await scope.ServiceProvider.GetRequiredService<DemoDataSeeder>().ResetAsync();
     Log.Information("Database migrated and demo data seeded");
     return;
+}
+
+// First, so everything after it (request log, HTTPS redirection, rate
+// limiter) sees the visitor's IP and https, not the front end's.
+if (trustForwardedHeaders)
+{
+    app.UseForwardedHeaders();
 }
 
 app.UseExceptionHandler(new ExceptionHandlerOptions

@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text;
 
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
 
 using PlateBack.Api.IntegrationTests.Infrastructure;
 
@@ -125,4 +126,67 @@ public class RateLimitTests(PlateBackFactory factory) : ApiTestBase(factory)
         limited.Detail.ShouldNotBeNull();
         responses[3].Headers.RetryAfter.ShouldNotBeNull();
     }
+
+    /// <summary>
+    /// Week 6: on Azure every request arrives from App Service's front end, which
+    /// appends the visitor's IP to X-Forwarded-For. These sign-in attempts are
+    /// sent with that header, as the front end would send them.
+    /// </summary>
+    private static async Task<HttpResponseMessage> LoginFromAsync(HttpClient client, string forwardedFor)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/login")
+        {
+            Content = JsonContent.Create(new { email = "x@example.com", password = "whatever1" }),
+        };
+        request.Headers.Add("X-Forwarded-For", forwardedFor);
+        request.Headers.Add("X-Forwarded-Proto", "https");
+        return await client.SendAsync(request, Ct);
+    }
+
+    private WebApplicationFactory<Program> LimitOf3(bool trustForwardedHeaders) =>
+        Factory.WithWebHostBuilder(b => b
+            .UseSetting("RateLimits:AuthPerMinute", "3")
+            .UseSetting("ForwardedHeaders:Enabled", trustForwardedHeaders ? "true" : "false"));
+
+    [Fact]
+    public async Task Behind_the_front_end_each_visitor_gets_their_own_login_limit()
+    {
+        await using var app = LimitOf3(trustForwardedHeaders: true);
+        var client = app.CreateClient();
+        for (var i = 0; i < 3; i++)
+        {
+            (await LoginFromAsync(client, "203.0.113.7")).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        }
+        await ProblemAsync(await LoginFromAsync(client, "203.0.113.7"), HttpStatusCode.TooManyRequests, "RATE_LIMITED");
+
+        // A different visitor is not blocked by the first one's attempts.
+        (await LoginFromAsync(client, "198.51.100.9")).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task A_visitor_cannot_dodge_the_limit_by_sending_their_own_forwarded_address()
+    {
+        await using var app = LimitOf3(trustForwardedHeaders: true);
+        var client = app.CreateClient();
+        // The visitor varies the first address; the front end appends the real one last.
+        for (var i = 0; i < 3; i++)
+        {
+            (await LoginFromAsync(client, $"10.0.0.{i}, 203.0.113.7")).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        }
+        await ProblemAsync(await LoginFromAsync(client, "10.0.0.99, 203.0.113.7"), HttpStatusCode.TooManyRequests, "RATE_LIMITED");
+    }
+
+    [Fact]
+    public async Task Without_a_front_end_forwarded_addresses_are_ignored()
+    {
+        // The default (development, tests): the header could come from anyone.
+        await using var app = LimitOf3(trustForwardedHeaders: false);
+        var client = app.CreateClient();
+        for (var i = 0; i < 3; i++)
+        {
+            (await LoginFromAsync(client, $"203.0.113.{i}")).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        }
+        await ProblemAsync(await LoginFromAsync(client, "203.0.113.99"), HttpStatusCode.TooManyRequests, "RATE_LIMITED");
+    }
 }
+
