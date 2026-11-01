@@ -1,0 +1,78 @@
+# Deploys PlateBack to Azure App Service: the React app (from the frontend
+# repository) is built into the API's wwwroot, so one App Service serves both.
+#
+# Runs after the Tests workflow passes on main, or by hand (Actions, Deploy,
+# Run workflow), for example after a frontend change. It stays switched off
+# until the repository variable AZURE_WEBAPP_NAME is set (Settings, Secrets
+# and variables, Actions), so nothing is deployed before Azure is set up.
+#
+# Needs: variable AZURE_WEBAPP_NAME (the App Service name) and secret
+# AZURE_WEBAPP_PUBLISH_PROFILE (Download publish profile in the portal).
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [Tests]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+# One deployment at a time; a newer one waits instead of interrupting.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      vars.AZURE_WEBAPP_NAME != '' &&
+      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-24.04
+    environment:
+      name: production
+      url: https://${{ vars.AZURE_WEBAPP_NAME }}.azurewebsites.net
+    steps:
+      - name: Check out the API (the commit the tests passed on)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Check out the frontend
+        uses: actions/checkout@v4
+        with:
+          repository: mhrjnrahul/PlateBack---Frontend
+          path: frontend-src
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend-src/frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend-src/frontend/package-lock.json
+
+      - name: Build the React app
+        working-directory: frontend-src/frontend
+        run: |
+          npm ci
+          npm run build
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Publish the API with the React app in wwwroot
+        run: |
+          dotnet publish src/PlateBack.Api --configuration Release --output publish
+          cp -r frontend-src/frontend/dist publish/wwwroot
+
+      - name: Deploy to App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: publish
+
+      - name: Check the live site answers
+        # The free plan may need a minute to start the new version.
+        run: >-
+          curl --fail --silent --show-error --retry 12 --retry-delay 15 --retry-all-errors
+          "https://${{ vars.AZURE_WEBAPP_NAME }}.azurewebsites.net/health"
