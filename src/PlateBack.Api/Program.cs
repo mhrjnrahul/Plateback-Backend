@@ -11,6 +11,8 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
+using OpenTelemetry.Logs;
+
 using PlateBack.Api.Endpoints;
 using PlateBack.Api.Extensions;
 using PlateBack.Api.Middleware;
@@ -62,7 +64,10 @@ builder.Services.AddSerilog((services, logger) =>
 // request's trace id.
 if (!string.IsNullOrEmpty(builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]))
 {
-    builder.Services.AddOpenTelemetry().UseAzureMonitor();
+    builder.Services.AddOpenTelemetry()
+        // Added before the exporter, so it runs first.
+        .WithLogging(logging => logging.AddProcessor(new ExpectedErrorsProcessor()))
+        .UseAzureMonitor();
 }
 
 // ---------- Settings (checked at startup, so a missing secret fails fast) ----------
