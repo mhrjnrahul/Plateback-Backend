@@ -45,6 +45,11 @@ public static class DependencyInjection
         services.AddScoped<DemoDataSeeder>();
         services.AddOptions<DemoOptions>().Bind(configuration.GetSection(DemoOptions.Section));
         services.AddOptions<DatabaseOptions>().Bind(configuration.GetSection(DatabaseOptions.Section));
+        services.AddSingleton<DemoRefreshService>();
+        if (configuration.GetValue($"{DemoOptions.Section}:{nameof(DemoOptions.RefreshWhenStale)}", false))
+        {
+            services.AddHostedService(sp => sp.GetRequiredService<DemoRefreshService>());
+        }
 
         services.AddOptions<UploadOptions>().Bind(configuration.GetSection(UploadOptions.Section));
         services.AddOptions<StorageOptions>().Bind(configuration.GetSection(StorageOptions.Section));

@@ -10,6 +10,12 @@ public sealed class DemoOptions
     /// password123 as every demo account. Required where the site is public.
     /// </summary>
     public string? AdminPassword { get; set; }
+
+    /// <summary>
+    /// For a public demo: reset the demo data once every demo listing has
+    /// ended, so the site never looks empty (see DemoRefreshService).
+    /// </summary>
+    public bool RefreshWhenStale { get; set; }
 }
 
 /// <summary>What the API does to the database when it starts ("Database" section).</summary>

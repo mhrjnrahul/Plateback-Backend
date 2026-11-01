@@ -71,6 +71,35 @@ public class DeploymentTests(PlateBackFactory factory) : ApiTestBase(factory)
         error.ToString().ShouldContain("Demo:AdminPassword");
     }
 
+    // ---------- Keeping the public demo fresh ----------
+
+    [Fact]
+    public async Task A_demo_whose_listings_have_all_ended_is_refreshed_with_new_pickup_windows()
+    {
+        // Two days later every seeded pickup window has ended: the live site would look empty.
+        Clock.Advance(TimeSpan.FromDays(2));
+        var refresher = Factory.Services.GetRequiredService<DemoRefreshService>();
+
+        (await refresher.RefreshIfStaleAsync(Ct)).ShouldBeTrue();
+
+        var croissant = await ReadAsync<ListingBody>(await Anonymous().GetAsync($"/api/v1/listings/{Id("listing-croissant")}", Ct));
+        croissant.PickupEnd.ShouldBeGreaterThan(Clock.GetUtcNow());
+        croissant.Status.ShouldBe("Active");
+    }
+
+    [Fact]
+    public async Task A_demo_with_live_listings_is_left_alone()
+    {
+        var maya = await MayaAsync();
+        (await maya.PostAsJsonAsync($"/api/v1/listings/{Id("listing-thali")}/reservations", new { quantity = 1 }, Ct))
+            .StatusCode.ShouldBe(HttpStatusCode.Created);
+
+        (await Factory.Services.GetRequiredService<DemoRefreshService>().RefreshIfStaleAsync(Ct)).ShouldBeFalse();
+
+        var mine = await ReadAsync<PageBody<ReservationBody>>(await maya.GetAsync("/api/v1/reservations/mine", Ct));
+        mine.Items.ShouldContain(r => r.ListingId == Id("listing-thali"));
+    }
+
     // ---------- Hosting the React app ----------
 
     private sealed class FrontendBuild : IDisposable
